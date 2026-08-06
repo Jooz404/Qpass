@@ -180,7 +180,7 @@ router.get('/by-no/:noLO', async (req, res) => {
 });
 
 // GET /api/lo/:id
-router.get('/:id', authenticate, authorize('ADMIN', 'PENGAWAS'), async (req, res) => {
+router.get('/:id', authenticate, authorize('ADMIN', 'PENGAWAS', 'AMT', 'SPBU'), async (req, res) => {
   try {
     const lo = await prisma.loadingOrder.findUnique({
       where: { id: parseInt(req.params.id) },

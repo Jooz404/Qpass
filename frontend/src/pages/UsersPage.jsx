@@ -18,9 +18,10 @@ export default function UsersPage() {
   const [deleteConfirm, setDeleteConfirm] = useState({ isOpen: false, id: null, name: '', loading: false });
 
   const [form, setForm] = useState({
-    name: '', email: '', password: '', role: 'PENGAWAS', nip: ''
+    name: '', email: '', password: '', role: 'PENGAWAS', nip: '', spbuId: ''
   });
   const [nipLookup, setNipLookup] = useState({ loading: false, amt: null, error: null });
+  const [spbus, setSpbus] = useState([]);
 
   const fetchUsers = useCallback(async () => {
     setLoading(true);
@@ -37,26 +38,34 @@ export default function UsersPage() {
   const fetchStats = async () => {
     try {
       const res = await api.get('/users/stats');
-      console.log('Stats response:', res.data);
       setStats(res.data.data);
     } catch (err) {
       console.error('Failed to fetch user stats:', err);
-      console.error('Error response:', err.response?.data);
-      // Don't show toast error for stats, just log it
-      // Stats are optional, page should still work without them
+    }
+  };
+
+  const fetchSpbus = async () => {
+    try {
+      const res = await api.get('/spbu');
+      setSpbus(res.data.data || []);
+    } catch (err) {
+      console.error('Failed to fetch SPBU list:', err);
     }
   };
 
   useEffect(() => {
     fetchUsers();
-  }, [fetchUsers]);
-
-  useEffect(() => {
     fetchStats();
-  }, []);
+    fetchSpbus();
+  }, [fetchUsers]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    // Validate SPBU for SPBU role
+    if (form.role === 'SPBU' && !form.spbuId) {
+      toast.error('SPBU wajib dipilih untuk akun Petugas SPBU');
+      return;
+    }
     // Validate NIP for AMT
     if (form.role === 'AMT' && !editId) {
       if (!form.nip || !form.nip.trim()) {
@@ -81,7 +90,7 @@ export default function UsersPage() {
       }
       setShowCreate(false);
       setEditId(null);
-      setForm({ name: '', email: '', password: '', role: 'PENGAWAS', nip: '' });
+      setForm({ name: '', email: '', password: '', role: 'PENGAWAS', nip: '', spbuId: '' });
       setNipLookup({ loading: false, amt: null, error: null });
       fetchUsers();
     } catch (err) {
@@ -106,7 +115,7 @@ export default function UsersPage() {
 
   const handleEdit = (u) => {
     setEditId(u.id);
-    setForm({ name: u.name, email: u.email, password: '', role: u.role, nip: '' });
+    setForm({ name: u.name, email: u.email, password: '', role: u.role, nip: '', spbuId: u.spbuId || '' });
     setNipLookup({ loading: false, amt: null, error: null });
     setShowCreate(true);
   };
@@ -242,14 +251,36 @@ export default function UsersPage() {
             <div>
               <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Role</label>
               <select value={form.role} onChange={e => {
-                setForm(f => ({ ...f, role: e.target.value, nip: '' }));
+                setForm(f => ({ ...f, role: e.target.value, nip: '', spbuId: '' }));
                 setNipLookup({ loading: false, amt: null, error: null });
               }} className="input-field mt-1">
                 <option value="PENGAWAS">Pengawas IT</option>
                 <option value="ADMIN">Admin</option>
+                <option value="SPBU">Petugas SPBU</option>
                 <option value="AMT">Awak MT (AMT)</option>
               </select>
             </div>
+            {/* SPBU selection field for SPBU role */}
+            {form.role === 'SPBU' && (
+              <div>
+                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                  Pilih SPBU <span className="text-red-500">*</span>
+                </label>
+                <select
+                  value={form.spbuId}
+                  onChange={e => setForm(f => ({ ...f, spbuId: e.target.value }))}
+                  className="input-field mt-1"
+                  required
+                >
+                  <option value="">-- Pilih SPBU --</option>
+                  {spbus.map(s => (
+                    <option key={s.id} value={s.id}>
+                      {s.code} - {s.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
             {/* NIP field only for AMT role on create */}
             {form.role === 'AMT' && !editId && (
               <div>

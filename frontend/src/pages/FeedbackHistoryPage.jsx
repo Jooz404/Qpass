@@ -10,9 +10,10 @@ const getFeedbackIssueCount = (feedback) => {
   let count = 0;
   if (feedback.sealCondition === 'RUSAK') count += 1;
   if (feedback.volumeStatus === 'SELISIH') count += 1;
-  if (feedback.visualCondition !== 'JERNIH') count += 1;
+  if (feedback.visualCondition && feedback.visualCondition !== 'JERNIH') count += 1;
   if (typeof feedback.density === 'number' && (feedback.density < 715 || feedback.density > 770)) count += 1;
   if (typeof feedback.rating === 'number' && feedback.rating <= 2) count += 1;
+  if (typeof feedback.ratingKeseluruhan === 'number' && feedback.ratingKeseluruhan <= 2) count += 1;
   return count;
 };
 
@@ -150,18 +151,18 @@ export default function FeedbackHistoryPage() {
               <tr><td colSpan={14} className="text-center py-12 text-gray-500">Tidak ada data</td></tr>
             ) : feedbacks.map(fb => (
               <tr key={fb.id}>
-                <td className="whitespace-nowrap text-xs">{new Date(fb.submittedAt).toLocaleString('id-ID')}</td>
-                <td className="font-medium text-gray-900 dark:text-white">{fb.lo?.noLO}</td>
-                <td className="max-w-[120px] truncate">{fb.lo?.spbu?.name}</td>
-                <td className="max-w-[150px] truncate text-xs text-gray-500">{fb.lo?.spbu?.address}</td>
-                <td>{fb.lo?.product}</td>
-                <td>{fb.lo?.truck?.nopol}</td>
-                <td>{fb.lo?.amt?.name}</td>
-                <td><span className={fb.sealCondition === 'RUSAK' ? 'text-red-600 font-semibold' : 'text-emerald-600'}>{fb.sealCondition}</span></td>
-                <td><span className={fb.volumeStatus === 'SELISIH' ? 'text-red-600 font-semibold' : 'text-emerald-600'}>{fb.volumeStatus}{fb.volumeDiff ? ` (${fb.volumeDiff}L)` : ''}</span></td>
-                <td><span className={fb.visualCondition !== 'JERNIH' ? 'text-red-600 font-semibold' : 'text-emerald-600'}>{fb.visualCondition.replace('_', ' ')}</span></td>
-                <td><span className={fb.density < 715 || fb.density > 770 ? 'text-red-600 font-semibold' : ''}>{fb.density}</span></td>
-                <td>{'⭐'.repeat(fb.rating)}</td>
+                <td className="whitespace-nowrap text-xs">{fb.submittedAt ? new Date(fb.submittedAt).toLocaleString('id-ID') : '-'}</td>
+                <td className="font-medium text-gray-900 dark:text-white">{fb.lo?.noLO || '-'}</td>
+                <td className="max-w-[120px] truncate">{fb.lo?.spbu?.name || '-'}</td>
+                <td className="max-w-[150px] truncate text-xs text-gray-500">{fb.lo?.spbu?.address || '-'}</td>
+                <td>{fb.lo?.product || '-'}</td>
+                <td>{fb.lo?.truck?.nopol || '-'}</td>
+                <td>{fb.lo?.amt?.name || '-'}</td>
+                <td>{fb.sealCondition ? <span className={fb.sealCondition === 'RUSAK' ? 'text-red-600 font-semibold' : 'text-emerald-600'}>{fb.sealCondition}</span> : '-'}</td>
+                <td>{fb.volumeStatus ? <span className={fb.volumeStatus === 'SELISIH' ? 'text-red-600 font-semibold' : 'text-emerald-600'}>{fb.volumeStatus}{fb.volumeDiff ? ` (${fb.volumeDiff}L)` : ''}</span> : '-'}</td>
+                <td>{fb.visualCondition ? <span className={fb.visualCondition !== 'JERNIH' ? 'text-red-600 font-semibold' : 'text-emerald-600'}>{fb.visualCondition.replace('_', ' ')}</span> : '-'}</td>
+                <td>{fb.density !== undefined && fb.density !== null ? <span className={fb.density < 715 || fb.density > 770 ? 'text-red-600 font-semibold' : ''}>{fb.density}</span> : '-'}</td>
+                <td>{'⭐'.repeat(fb.rating || fb.ratingKeseluruhan || 0)}</td>
                 <td>
                   {(() => {
                     const badge = getHistoryStatusBadge(fb);
@@ -210,11 +211,15 @@ export default function FeedbackHistoryPage() {
               <div className="flex justify-between"><span className="text-gray-500">Nopol</span><span>{detail.lo?.truck?.nopol}</span></div>
               <div className="flex justify-between"><span className="text-gray-500">AMT</span><span>{detail.lo?.amt?.name}</span></div>
               <hr className="dark:border-slate-700" />
-              <div className="flex justify-between"><span className="text-gray-500">Segel</span><span className={detail.sealCondition === 'RUSAK' ? 'text-red-600 font-bold' : 'text-emerald-600'}>{detail.sealCondition}</span></div>
-              <div className="flex justify-between"><span className="text-gray-500">Volume</span><span className={detail.volumeStatus === 'SELISIH' ? 'text-red-600 font-bold' : 'text-emerald-600'}>{detail.volumeStatus}{detail.volumeDiff ? ` (${detail.volumeDiff}L)` : ''}</span></div>
-              <div className="flex justify-between"><span className="text-gray-500">Visual</span><span className={detail.visualCondition !== 'JERNIH' ? 'text-red-600 font-bold' : 'text-emerald-600'}>{detail.visualCondition.replace('_', ' ')}</span></div>
-              <div className="flex justify-between"><span className="text-gray-500">Densitas</span><span className={detail.density < 715 || detail.density > 770 ? 'text-red-600 font-bold' : ''}>{detail.density} kg/m³</span></div>
-              <div className="flex justify-between"><span className="text-gray-500">Rating</span><span>{'⭐'.repeat(detail.rating)} ({detail.rating}/5)</span></div>
+              {detail.sealCondition && <div className="flex justify-between"><span className="text-gray-500">Segel</span><span className={detail.sealCondition === 'RUSAK' ? 'text-red-600 font-bold' : 'text-emerald-600'}>{detail.sealCondition}</span></div>}
+              {detail.volumeStatus && <div className="flex justify-between"><span className="text-gray-500">Volume</span><span className={detail.volumeStatus === 'SELISIH' ? 'text-red-600 font-bold' : 'text-emerald-600'}>{detail.volumeStatus}{detail.volumeDiff ? ` (${detail.volumeDiff}L)` : ''}</span></div>}
+              {detail.visualCondition && <div className="flex justify-between"><span className="text-gray-500">Visual</span><span className={detail.visualCondition !== 'JERNIH' ? 'text-red-600 font-bold' : 'text-emerald-600'}>{detail.visualCondition.replace('_', ' ')}</span></div>}
+              {detail.density !== undefined && detail.density !== null && <div className="flex justify-between"><span className="text-gray-500">Densitas</span><span className={detail.density < 715 || detail.density > 770 ? 'text-red-600 font-bold' : ''}>{detail.density} kg/m³</span></div>}
+              {detail.ratingKeramahan && <div className="flex justify-between"><span className="text-gray-500">Keramahan</span><span>{'⭐'.repeat(detail.ratingKeramahan)}</span></div>}
+              {detail.ratingKooperasi && <div className="flex justify-between"><span className="text-gray-500">Kerjasama</span><span>{'⭐'.repeat(detail.ratingKooperasi)}</span></div>}
+              {detail.ratingFasilitas && <div className="flex justify-between"><span className="text-gray-500">Fasilitas</span><span>{'⭐'.repeat(detail.ratingFasilitas)}</span></div>}
+              {detail.ratingProses && <div className="flex justify-between"><span className="text-gray-500">Proses Bongkar</span><span>{'⭐'.repeat(detail.ratingProses)}</span></div>}
+              <div className="flex justify-between"><span className="text-gray-500">Rating Total</span><span>{'⭐'.repeat(detail.rating || detail.ratingKeseluruhan || 0)} ({detail.rating || detail.ratingKeseluruhan || 0}/5)</span></div>
               <div className="flex justify-between"><span className="text-gray-500">Status</span><span className={getHistoryStatusBadge(detail).className}>{getHistoryStatusBadge(detail).text}</span></div>
               {detail.notes && <div><span className="text-gray-500">Catatan:</span><p className="mt-1 text-gray-700 dark:text-gray-300">{detail.notes}</p></div>}
               {detail.photoUrl && <img src={detail.photoUrl} alt="Foto" className="w-full rounded-xl mt-2" />}

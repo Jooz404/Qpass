@@ -74,7 +74,7 @@ router.get('/', authenticate, async (req, res) => {
 // POST /api/users - Create user
 router.post('/', authenticate, authorize('ADMIN'), async (req, res) => {
   try {
-    const { name, email, password, role, phone, nip } = req.body;
+    const { name, email, password, role, phone, nip, spbuId } = req.body;
 
     const existing = await prisma.user.findUnique({ where: { email } });
     if (existing) {
@@ -82,6 +82,15 @@ router.post('/', authenticate, authorize('ADMIN'), async (req, res) => {
     }
 
     let amtId = null;
+    let selectedSpbuId = null;
+
+    // If creating an SPBU account, spbuId is required
+    if (role === 'SPBU') {
+      if (!spbuId) {
+        return res.status(400).json({ success: false, message: 'SPBU wajib dipilih untuk akun Petugas SPBU' });
+      }
+      selectedSpbuId = parseInt(spbuId);
+    }
 
     // If creating an AMT account, NIP is required and must link to an AMT record
     if (role === 'AMT') {
@@ -105,8 +114,8 @@ router.post('/', authenticate, authorize('ADMIN'), async (req, res) => {
 
     const hashed = await bcrypt.hash(password, 12);
     const user = await prisma.user.create({
-      data: { name, email, password: hashed, role, phone, amtId },
-      select: { id: true, name: true, email: true, role: true, phone: true, amtId: true, createdAt: true },
+      data: { name, email, password: hashed, role, phone, amtId, spbuId: selectedSpbuId },
+      select: { id: true, name: true, email: true, role: true, phone: true, amtId: true, spbuId: true, createdAt: true },
     });
 
     // Audit log
@@ -116,7 +125,7 @@ router.post('/', authenticate, authorize('ADMIN'), async (req, res) => {
         action: 'CREATE',
         entity: 'User',
         entityId: user.id,
-        details: `Created user: ${user.name} (${user.role})${amtId ? ` linked to AMT ID ${amtId}` : ''}`,
+        details: `Created user: ${user.name} (${user.role})${amtId ? ` linked to AMT ID ${amtId}` : ''}${selectedSpbuId ? ` linked to SPBU ID ${selectedSpbuId}` : ''}`,
       },
     });
 
@@ -131,9 +140,12 @@ router.post('/', authenticate, authorize('ADMIN'), async (req, res) => {
 router.put('/:id', authenticate, authorize('ADMIN'), async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, email, role, phone, isActive, password } = req.body;
+    const { name, email, role, phone, isActive, password, spbuId } = req.body;
 
     const data = { name, email, role, phone, isActive };
+    if (role === 'SPBU' && spbuId) {
+      data.spbuId = parseInt(spbuId);
+    }
     if (password) {
       data.password = await bcrypt.hash(password, 12);
     }
@@ -141,7 +153,7 @@ router.put('/:id', authenticate, authorize('ADMIN'), async (req, res) => {
     const user = await prisma.user.update({
       where: { id: parseInt(id) },
       data,
-      select: { id: true, name: true, email: true, role: true, phone: true, isActive: true },
+      select: { id: true, name: true, email: true, role: true, phone: true, spbuId: true, isActive: true },
     });
 
     res.json({ success: true, data: user });
