@@ -1,0 +1,312 @@
+// Q-PASS BITUNG - Prisma Schema
+// Quality & Quantity Assurance Testimonial System
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// ENUMS
+// ============================================
+
+enum Role {
+  ADMIN
+  PENGAWAS
+  SPBU
+  AMT
+}
+
+enum LOStatus {
+  PENDING
+  IN_TRANSIT
+  DELIVERED
+  COMPLETED
+}
+
+enum FeedbackStatus {
+  NORMAL
+  HIGH_PRIORITY
+}
+
+enum ComplaintStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+}
+
+enum SealCondition {
+  UTUH
+  RUSAK
+}
+
+enum VolumeStatus {
+  SESUAI
+  SELISIH
+}
+
+enum VisualCondition {
+  JERNIH
+  ADA_AIR
+  ADA_ENDAPAN
+}
+
+// ============================================
+// MODELS
+// ============================================
+
+model User {
+  id            Int       @id @default(autoincrement())
+  name          String
+  email         String    @unique
+  password      String
+  role          Role      @default(PENGAWAS)
+  phone         String?
+  avatar        String?
+  isActive      Boolean   @default(true)
+  isVerified    Boolean   @default(false)
+  otpCode       String?
+  otpExpiry     DateTime?
+  lastLogin     DateTime?
+  lastLoginLat  Float?
+  lastLoginLng  Float?
+
+  // Relations
+  spbuId        Int?
+  spbu          Spbu?        @relation(fields: [spbuId], references: [id])
+  amtId         Int?
+  complaints    Complaint[]  @relation("ResolvedBy")
+  auditLogs     AuditLog[]
+  notifications Notification[]
+
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@map("users")
+}
+
+model Spbu {
+  id            Int       @id @default(autoincrement())
+  name          String
+  code          String    @unique
+  address       String
+  city          String    @default("Bitung")
+  region        String    @default("Sulawesi Utara")
+  lat           Float
+  lng           Float
+  phone         String?
+  ownerName     String?
+  isActive      Boolean   @default(true)
+
+  // Relations
+  loadingOrders LoadingOrder[]
+  feedbacks     Feedback[]
+  amtFeedbacks  AMTFeedback[]
+  users         User[]
+
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@map("spbus")
+}
+
+model Truck {
+  id            Int       @id @default(autoincrement())
+  nopol         String    @unique
+  capacity      Float     @default(8000)
+  type          String    @default("Tangki")
+  isActive      Boolean   @default(true)
+
+  // Relations
+  loadingOrders LoadingOrder[]
+
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@map("trucks")
+}
+
+model Amt {
+  id            Int       @id @default(autoincrement())
+  name          String
+  nip           String    @unique
+  code          String    @unique
+  phone         String?
+  isActive      Boolean   @default(true)
+
+  // Relations
+  loadingOrders LoadingOrder[] @relation("PrimaryAmt")
+  secondaryLoadingOrders LoadingOrder[] @relation("SecondaryAmt")
+  amtFeedbacks  AMTFeedback[] @relation("RatedAmt")
+
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@map("amts")
+}
+
+model LoadingOrder {
+  id            Int       @id @default(autoincrement())
+  noLO          String    @unique
+  product       String
+  volume        Float
+  date          DateTime  @default(now())
+  status        LOStatus  @default(PENDING)
+  qrCode        String?   @db.Text
+  qrToken       String?   @unique @default(uuid())
+
+  // Relations
+  spbuId        Int
+  spbu          Spbu      @relation(fields: [spbuId], references: [id])
+  truckId       Int
+  truck         Truck     @relation(fields: [truckId], references: [id])
+  amtId         Int
+  amt           Amt       @relation("PrimaryAmt", fields: [amtId], references: [id])
+  secondaryAmtId Int?
+  secondaryAmt  Amt?      @relation("SecondaryAmt", fields: [secondaryAmtId], references: [id])
+  feedback      Feedback?
+  amtFeedbacks  AMTFeedback[]
+
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@map("loading_orders")
+}
+
+model Feedback {
+  id              Int             @id @default(autoincrement())
+  
+  // Loading Order reference
+  loId            Int             @unique
+  lo              LoadingOrder    @relation(fields: [loId], references: [id])
+
+  // SPBU reference (denormalized for faster queries)
+  spbuId          Int
+  spbu            Spbu            @relation(fields: [spbuId], references: [id])
+
+  // Quality & Quantity Data
+  sealCondition   SealCondition
+  volumeStatus    VolumeStatus
+  volumeDiff      Float?          // Selisih volume in liters
+  visualCondition VisualCondition
+  density         Float           // kg/m³
+
+  // Rating & Notes
+  rating          Int             // 1-5
+  notes           String?         @db.Text
+  photoUrl        String?
+
+  // Geotagging
+  lat             Float?
+  lng             Float?
+
+  // Computed status
+  status          FeedbackStatus  @default(NORMAL)
+
+  // Timestamps
+  submittedAt     DateTime        @default(now())
+
+  // Relations
+  complaint       Complaint?
+
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  @@map("feedbacks")
+}
+
+model AMTFeedback {
+  id              Int       @id @default(autoincrement())
+  
+  // AMT reference (who gave the rating)
+  amtId           Int
+  amt             Amt       @relation("RatedAmt", fields: [amtId], references: [id])
+
+  // SPBU reference (who is being rated)
+  spbuId          Int
+  spbu            Spbu      @relation(fields: [spbuId], references: [id])
+
+  // Loading Order reference
+  loId            Int
+  lo              LoadingOrder @relation(fields: [loId], references: [id])
+
+  // Rating Data
+  ratingKeramahan  Int       // 1-5 - Keramahan SPBU
+  ratingKooperasi  Int       // 1-5 - Kerjasama SPBU
+  ratingFasilitas  Int       // 1-5 - Fasilitas SPBU
+  ratingProses     Int       // 1-5 - Proses bongkar muat
+  ratingKeseluruhan Int      // 1-5 - Overall rating
+
+  // Notes
+  notes           String?   @db.Text
+  photoUrl        String?
+
+  // Geotagging
+  lat             Float?
+  lng             Float?
+
+  // Timestamps
+  submittedAt     DateTime  @default(now())
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@unique([loId, amtId])
+  @@map("amt_feedbacks")
+}
+
+model Complaint {
+  id            Int             @id @default(autoincrement())
+  feedbackId    Int             @unique
+  feedback      Feedback        @relation(fields: [feedbackId], references: [id])
+  description   String          @db.Text
+  reasons       String          @db.Text // Comma-separated list of reason codes
+  status        ComplaintStatus  @default(OPEN)
+  
+  resolvedById  Int?
+  resolvedBy    User?           @relation("ResolvedBy", fields: [resolvedById], references: [id])
+  resolvedNote  String?         @db.Text
+  resolvedAt    DateTime?
+
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  @@map("complaints")
+}
+
+model Notification {
+  id            Int       @id @default(autoincrement())
+  userId        Int?
+  user          User?     @relation(fields: [userId], references: [id])
+  
+  title         String
+  message       String    @db.Text
+  type          String    @default("info") // info, warning, critical
+  isRead        Boolean   @default(false)
+  link          String?
+  
+  createdAt     DateTime  @default(now())
+
+  @@map("notifications")
+}
+
+model AuditLog {
+  id            Int       @id @default(autoincrement())
+  userId        Int?
+  user          User?     @relation(fields: [userId], references: [id])
+  
+  action        String
+  entity        String
+  entityId      Int?
+  details       String?   @db.Text
+  ipAddress     String?
+
+  createdAt     DateTime  @default(now())
+
+  @@map("audit_logs")
+}
