@@ -13,7 +13,7 @@ const server = http.createServer(app);
 // Socket.IO setup
 const io = new Server(server, {
   cors: {
-    origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+    origin: (origin, callback) => callback(null, true),
     methods: ['GET', 'POST'],
     credentials: true,
   },
@@ -63,7 +63,7 @@ app.use('/api/auth/register', authLimiter);
 
 // Middleware
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+  origin: (origin, callback) => callback(null, true),
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
   allowedHeaders: ['Content-Type', 'Authorization'],
@@ -76,7 +76,7 @@ app.use((req, res, next) => {
   res.setHeader('X-Frame-Options', 'DENY');
   res.setHeader('X-XSS-Protection', '1; mode=block');
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
-  res.setHeader('Permissions-Policy', 'geolocation=(), microphone=(), camera=()');
+  res.setHeader('Permissions-Policy', 'geolocation=(self), microphone=(), camera=()');
   next();
 });
 
@@ -93,6 +93,7 @@ app.use('/api/spbu', require('./routes/spbu.routes'));
 app.use('/api/trucks', require('./routes/truck.routes'));
 app.use('/api/amt', require('./routes/amt.routes'));
 app.use('/api/lo', require('./routes/lo.routes'));
+app.use('/api/location', require('./routes/location.routes'));
 app.use('/api/feedback', require('./routes/feedback.routes'));
 app.use('/api/amt-feedback', require('./routes/amt-feedback.routes'));
 app.use('/api/complaints', require('./routes/complaint.routes'));

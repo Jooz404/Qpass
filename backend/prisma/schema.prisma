@@ -139,10 +139,15 @@ model Amt {
   phone         String?
   isActive      Boolean   @default(true)
 
+  latestLat          Float?
+  latestLng          Float?
+  lastLocationUpdate DateTime?
+
   // Relations
   loadingOrders LoadingOrder[] @relation("PrimaryAmt")
   secondaryLoadingOrders LoadingOrder[] @relation("SecondaryAmt")
   amtFeedbacks  AMTFeedback[] @relation("RatedAmt")
+  locationLogs  AmtLocationLog[]
 
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
@@ -171,6 +176,7 @@ model LoadingOrder {
   secondaryAmt  Amt?      @relation("SecondaryAmt", fields: [secondaryAmtId], references: [id])
   feedback      Feedback?
   amtFeedbacks  AMTFeedback[]
+  locationLogs  AmtLocationLog[]
 
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
@@ -310,3 +316,23 @@ model AuditLog {
 
   @@map("audit_logs")
 }
+
+model AmtLocationLog {
+  id            Int           @id @default(autoincrement())
+  amtId         Int
+  amt           Amt           @relation(fields: [amtId], references: [id], onDelete: Cascade)
+  loId          Int?
+  lo            LoadingOrder? @relation(fields: [loId], references: [id], onDelete: SetNull)
+  lat           Float
+  lng           Float
+  speed         Float?
+  heading       Float?
+  accuracy      Float?
+  status        String?       @default("IN_TRANSIT")
+  recordedAt    DateTime      @default(now())
+
+  createdAt     DateTime      @default(now())
+
+  @@map("amt_location_logs")
+}
+

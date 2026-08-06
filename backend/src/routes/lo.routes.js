@@ -339,6 +339,45 @@ router.post('/generate-daily', authenticate, authorize('ADMIN', 'PENGAWAS'), asy
   }
 });
 
+// PATCH /api/lo/:id/status - Update LO status (for AMT, Admin, Pengawas)
+router.patch('/:id/status', authenticate, async (req, res) => {
+  try {
+    const { status } = req.body;
+    const loId = parseInt(req.params.id);
+
+    if (!['PENDING', 'IN_TRANSIT', 'DELIVERED', 'COMPLETED'].includes(status)) {
+      return res.status(400).json({ success: false, message: 'Status LO tidak valid' });
+    }
+
+    const updatedLO = await prisma.loadingOrder.update({
+      where: { id: loId },
+      data: { status },
+      include: {
+        spbu: { select: { id: true, name: true, code: true } },
+        truck: { select: { id: true, nopol: true } },
+        amt: { select: { id: true, name: true } },
+        secondaryAmt: { select: { id: true, name: true } },
+      },
+    });
+
+    // Emit Socket.IO event for real-time status update
+    const io = req.app.get('io');
+    if (io) {
+      io.emit('lo-status-updated', {
+        loId: updatedLO.id,
+        noLO: updatedLO.noLO,
+        status: updatedLO.status,
+        updatedAt: new Date(),
+      });
+    }
+
+    res.json({ success: true, data: updatedLO });
+  } catch (error) {
+    console.error('Update LO status error:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
 // PUT /api/lo/:id
 router.put('/:id', authenticate, authorize('ADMIN', 'PENGAWAS'), async (req, res) => {
   try {

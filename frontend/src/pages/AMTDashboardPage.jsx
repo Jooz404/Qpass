@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { useToast } from '../context/ToastContext';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
+import locationService from '../services/locationService';
+import AMTTrackingPermissionModal from '../components/AMTTrackingPermissionModal';
 import { 
   Truck, 
   Star, 
@@ -15,7 +17,11 @@ import {
   Award,
   Zap,
   Flame,
-  Sparkles
+  Sparkles,
+  MapPin,
+  Navigation,
+  StopCircle,
+  Radio
 } from 'lucide-react';
 
 export default function AMTDashboardPage() {
@@ -32,8 +38,24 @@ export default function AMTDashboardPage() {
   const [showAllLOs, setShowAllLOs] = useState(false);
   const [expandedLO, setExpandedLO] = useState(null);
 
+  // Tracking state
+  const [selectedLoForTracking, setSelectedLoForTracking] = useState(null);
+  const [showPermissionModal, setShowPermissionModal] = useState(false);
+  const [isTracking, setIsTracking] = useState(locationService.isTrackingActive());
+  const [activeTrackingLoId, setActiveTrackingLoId] = useState(locationService.getActiveLoId());
+  const [trackingInfo, setTrackingInfo] = useState(locationService.getLastPosition());
+
   useEffect(() => {
     fetchDashboardData();
+
+    // Subscribe to real-time location tracking updates
+    const unsubscribe = locationService.subscribe((data) => {
+      setIsTracking(data.isTracking);
+      setActiveTrackingLoId(data.loId);
+      if (data.position) setTrackingInfo(data.position);
+    });
+
+    return () => unsubscribe();
   }, []);
 
   const fetchDashboardData = async () => {
@@ -105,6 +127,41 @@ export default function AMTDashboardPage() {
     navigate(`/amt-feedback/${loId}`);
   };
 
+  const handleStartTrackingClick = (lo) => {
+    setSelectedLoForTracking(lo);
+    setShowPermissionModal(true);
+  };
+
+  const handleConfirmTracking = async () => {
+    if (!selectedLoForTracking) return;
+    try {
+      setShowPermissionModal(false);
+      // Update status to IN_TRANSIT
+      await api.patch(`/lo/${selectedLoForTracking.id}/status`, { status: 'IN_TRANSIT' });
+      // Start client location tracking
+      await locationService.startTracking(selectedLoForTracking.id);
+      toast.success(`📍 Pelacakan lokasi aktif untuk LO ${selectedLoForTracking.noLO}`);
+      fetchDashboardData();
+    } catch (err) {
+      console.error('Error starting location tracking:', err);
+      toast.error(err.message || 'Gagal mengaktifkan pelacakan lokasi');
+    }
+  };
+
+  const handleStopTracking = async (loId) => {
+    try {
+      locationService.stopTracking();
+      if (loId) {
+        await api.patch(`/lo/${loId}/status`, { status: 'DELIVERED' });
+      }
+      toast.success('🛑 Pelacakan lokasi dihentikan & pengiriman ditandai selesai');
+      fetchDashboardData();
+    } catch (err) {
+      console.error('Error stopping tracking:', err);
+      toast.error('Gagal menghentikan pelacakan lokasi');
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -116,6 +173,36 @@ export default function AMTDashboardPage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-slate-100 to-slate-50 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 p-4 md:p-8">
       <div className="max-w-7xl mx-auto">
+        {/* Live Tracking Banner */}
+        {isTracking && (
+          <div className="mb-8 p-5 rounded-3xl bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 text-white shadow-xl shadow-emerald-500/20 border border-emerald-400/30 animate-pulse-subtle">
+            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="p-3 bg-white/20 backdrop-blur-md rounded-2xl animate-spin-slow">
+                  <Radio className="w-6 h-6 text-white" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="inline-block w-2.5 h-2.5 bg-emerald-300 rounded-full animate-ping" />
+                    <h3 className="font-bold text-lg">Pelacakan Lokasi Aktif (In-Transit)</h3>
+                  </div>
+                  <p className="text-xs text-white/80 mt-0.5">
+                    Lokasi armada tangki Anda sedang dipantau secara real-time oleh Pengawas & Admin Q-Pass.
+                    {trackingInfo?.speed ? ` • Kecepatan: ${trackingInfo.speed} km/jam` : ''}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => handleStopTracking(activeTrackingLoId)}
+                className="w-full md:w-auto px-5 py-2.5 bg-white text-emerald-800 hover:bg-emerald-50 font-bold text-sm rounded-xl shadow-md transition-all flex items-center justify-center gap-2 active:scale-95 shrink-0"
+              >
+                <StopCircle className="w-4 h-4 text-emerald-700" />
+                Selesai / Tiba di SPBU
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Header */}
         <div className="mb-8 relative">
           <div className="absolute inset-0 bg-gradient-to-r from-slate-200/50 to-slate-300/50 dark:from-slate-800/30 dark:to-slate-700/30 rounded-3xl blur-3xl" />
@@ -506,6 +593,32 @@ export default function AMTDashboardPage() {
                             </p>
                           </div>
                         </div>
+                        
+                        {/* LO Actions */}
+                        {(lo.status === 'PENDING' || lo.status === 'IN_TRANSIT') && (
+                          <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-700/50 flex flex-col sm:flex-row gap-3">
+                            {(!isTracking || activeTrackingLoId !== lo.id) && (
+                              <button
+                                onClick={() => handleStartTrackingClick(lo)}
+                                className="w-full py-3 bg-gradient-to-r from-red-600 via-rose-600 to-pertamina-blue text-white font-bold rounded-xl shadow-lg shadow-red-500/20 hover:shadow-red-500/30 transition-all duration-300 hover:scale-[1.02] flex items-center justify-center gap-2"
+                              >
+                                <Navigation className="w-4 h-4" />
+                                Mulai Pengiriman & Aktifkan Pelacakan Lokasi
+                              </button>
+                            )}
+
+                            {isTracking && activeTrackingLoId === lo.id && (
+                              <button
+                                onClick={() => handleStopTracking(lo.id)}
+                                className="w-full py-3 bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-bold rounded-xl shadow-lg shadow-emerald-500/20 hover:shadow-emerald-500/30 transition-all duration-300 hover:scale-[1.02] flex items-center justify-center gap-2"
+                              >
+                                <StopCircle className="w-4 h-4" />
+                                Selesai Pengiriman / Tiba di SPBU
+                              </button>
+                            )}
+                          </div>
+                        )}
+
                         {lo.status === 'DELIVERED' && (
                           <button
                             onClick={() => handleGiveFeedback(lo.id)}
@@ -524,6 +637,15 @@ export default function AMTDashboardPage() {
           </div>
         </div>
       </div>
+
+      {/* Permission Modal */}
+      <AMTTrackingPermissionModal
+        isOpen={showPermissionModal}
+        onClose={() => setShowPermissionModal(false)}
+        onConfirm={handleConfirmTracking}
+        loData={selectedLoForTracking}
+      />
     </div>
   );
 }
+
