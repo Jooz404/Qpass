@@ -30,6 +30,7 @@ import ScanQRPage from './pages/ScanQRPage';
 import AMTDashboardPage from './pages/AMTDashboardPage';
 import AMTFeedbackPage from './pages/AMTFeedbackPage';
 import AMTCameraPage from './pages/AMTCameraPage';
+import QualityControlPage from './pages/QualityControlPage';
 
 function PrivateRoute({ children, roles }) {
   const { user, loading } = useAuth();
@@ -207,6 +208,14 @@ export default function App() {
                 <PrivateRoute roles={['ADMIN']}>
                   <DashboardLayout>
                     <UsersPage />
+                  </DashboardLayout>
+                </PrivateRoute>
+              } />
+
+              <Route path="/quality-control" element={
+                <PrivateRoute roles={['ADMIN', 'PENGAWAS']}>
+                  <DashboardLayout>
+                    <QualityControlPage />
                   </DashboardLayout>
                 </PrivateRoute>
               } />

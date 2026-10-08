@@ -104,6 +104,25 @@ router.post('/', authenticate, authorize('AMT'), async (req, res) => {
       });
     }
 
+    // Emit real-time socket event for SPBU rating update
+    const io = req.app.get('io');
+    if (io) {
+      const [spbuFeedbacks, amtFeedbacks] = await Promise.all([
+        prisma.feedback.findMany({ where: { spbuId: parseInt(spbuId) }, select: { rating: true } }),
+        prisma.aMTFeedback.findMany({ where: { spbuId: parseInt(spbuId) }, select: { ratingKeseluruhan: true } })
+      ]);
+      const allRatings = [
+        ...spbuFeedbacks.map(f => f.rating),
+        ...amtFeedbacks.map(af => af.ratingKeseluruhan)
+      ];
+      const avgRating = allRatings.length > 0 ? (allRatings.reduce((a, b) => a + b, 0) / allRatings.length) : 0;
+
+      io.to('dashboard').emit('spbu-rating-updated', {
+        spbuId: parseInt(spbuId),
+        averageRating: avgRating
+      });
+    }
+
     res.status(201).json({ success: true, data: feedback });
   } catch (error) {
     console.error('Create AMT feedback error:', error);

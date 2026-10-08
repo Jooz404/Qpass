@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { useToast } from '../context/ToastContext';
 import api from '../services/api';
-import { Plus, Search, Edit3, Trash2, X, UserCheck, BarChart3, Star, AlertTriangle, ShieldCheck, Sparkles } from 'lucide-react';
+import { Plus, Search, Edit3, Trash2, X, UserCheck, BarChart3, Star, AlertTriangle, ShieldCheck, Sparkles, LayoutGrid, List, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Line } from 'react-chartjs-2';
 import ConfirmModal from '../components/ConfirmModal';
 
@@ -11,6 +11,9 @@ export default function AmtPage() {
   const [amts, setAmts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [viewMode, setViewMode] = useState('grid'); // 'grid' | 'table'
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(12);
   
   // Modal states
   const [showCreate, setShowCreate] = useState(false);
@@ -92,6 +95,10 @@ export default function AmtPage() {
     }
   };
 
+  // Client-side pagination for AMT list
+  const totalPages = Math.ceil(amts.length / pageSize) || 1;
+  const paginatedAmts = amts.slice((page - 1) * pageSize, page * pageSize);
+
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Header */}
@@ -113,61 +120,188 @@ export default function AmtPage() {
         </button>
       </div>
 
-      {/* Search */}
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-        <input
-          type="text" value={search} onChange={e => setSearch(e.target.value)}
-          className="input-field pl-10 py-2.5" placeholder="Cari nama atau NIP AMT..."
-        />
+      {/* Search & View Switcher */}
+      <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-3">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+          <input
+            type="text"
+            value={search}
+            onChange={e => { setSearch(e.target.value); setPage(1); }}
+            className="input-field pl-10 py-2.5 text-xs sm:text-sm"
+            placeholder="Cari nama atau NIP AMT..."
+          />
+        </div>
+        <div className="flex items-center gap-2">
+          {/* View Switcher Toggle */}
+          <div className="flex items-center bg-gray-100 dark:bg-slate-800 p-1 rounded-xl border border-gray-200 dark:border-slate-700">
+            <button
+              type="button"
+              onClick={() => setViewMode('grid')}
+              className={`p-1.5 rounded-lg text-xs font-semibold flex items-center gap-1 transition-all ${
+                viewMode === 'grid'
+                  ? 'bg-white dark:bg-slate-900 text-pertamina-red shadow-sm'
+                  : 'text-gray-500 hover:text-gray-900 dark:hover:text-white'
+              }`}
+              title="Tampilan Kartu (Grid)"
+            >
+              <LayoutGrid className="w-4 h-4" /> <span className="hidden sm:inline">Grid</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode('table')}
+              className={`p-1.5 rounded-lg text-xs font-semibold flex items-center gap-1 transition-all ${
+                viewMode === 'table'
+                  ? 'bg-white dark:bg-slate-900 text-pertamina-red shadow-sm'
+                  : 'text-gray-500 hover:text-gray-900 dark:hover:text-white'
+              }`}
+              title="Tampilan Tabel"
+            >
+              <List className="w-4 h-4" /> <span className="hidden sm:inline">Tabel</span>
+            </button>
+          </div>
+
+          <select
+            value={pageSize}
+            onChange={e => { setPageSize(Number(e.target.value)); setPage(1); }}
+            className="input-field py-2 text-xs w-auto"
+          >
+            <option value={12}>12 / Hal</option>
+            <option value={24}>24 / Hal</option>
+            <option value={48}>48 / Hal</option>
+          </select>
+        </div>
       </div>
 
-      {/* Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {loading ? (
-          <div className="col-span-full py-12 flex justify-center"><div className="spinner" /></div>
-        ) : amts.length === 0 ? (
-          <div className="col-span-full py-12 text-center text-gray-500">Tidak ada data AMT ditemukan</div>
-        ) : amts.map(a => (
-          <div key={a.id} className="glass-card p-5 border border-gray-100 dark:border-slate-800 flex flex-col justify-between hover:shadow-card-hover transition-all">
-            <div>
-              <div className="flex items-start justify-between mb-3">
-                <span className="px-2.5 py-1 rounded bg-pertamina-blue/10 text-pertamina-blue dark:bg-pertamina-blue/20 dark:text-blue-400 text-xs font-bold">
-                  NIP: {a.nip}
-                </span>
-                <span className={`badge ${a.isActive ? 'badge-success' : 'badge-danger'}`}>
-                  {a.isActive ? 'Aktif' : 'Nonaktif'}
-                </span>
-              </div>
-              <h3 className="font-bold text-lg text-gray-900 dark:text-white mb-1 truncate">{a.name}</h3>
-              <p className="text-xs text-gray-400 mb-3">{a.phone || '—'}</p>
-              <div className="mt-4 pt-3 border-t border-gray-100 dark:border-slate-800 grid grid-cols-2 gap-2 text-xs text-gray-500">
-                <div>
-                  <p className="text-[10px] text-gray-400">Total Pengiriman</p>
-                  <p className="font-semibold text-gray-700 dark:text-gray-300">{a._count?.loadingOrders || 0} Rit</p>
+      {/* Main Content: Grid vs Table */}
+      {loading ? (
+        <div className="py-12 flex justify-center"><div className="spinner" /></div>
+      ) : paginatedAmts.length === 0 ? (
+        <div className="py-12 text-center text-gray-500">Tidak ada data AMT ditemukan</div>
+      ) : viewMode === 'grid' ? (
+        /* Grid View */
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {paginatedAmts.map(a => (
+            <div key={a.id} className="glass-card p-5 border border-gray-100 dark:border-slate-800 flex flex-col justify-between hover:shadow-card-hover transition-all">
+              <div>
+                <div className="flex items-start justify-between mb-3">
+                  <span className="px-2.5 py-1 rounded bg-pertamina-blue/10 text-pertamina-blue dark:bg-pertamina-blue/20 dark:text-blue-400 text-xs font-bold">
+                    NIP: {a.nip}
+                  </span>
+                  <span className={`badge ${a.isActive ? 'badge-success' : 'badge-danger'}`}>
+                    {a.isActive ? 'Aktif' : 'Nonaktif'}
+                  </span>
                 </div>
-                <div>
-                  <p className="text-[10px] text-gray-400">Rating Rata-rata</p>
-                  <p className="font-semibold text-amber-500">⭐ {a.avgRating || '—'}</p>
+                <h3 className="font-bold text-lg text-gray-900 dark:text-white mb-1 truncate">{a.name}</h3>
+                <p className="text-xs text-gray-400 mb-3">{a.phone || '—'}</p>
+                <div className="mt-4 pt-3 border-t border-gray-100 dark:border-slate-800 grid grid-cols-2 gap-2 text-xs text-gray-500">
+                  <div>
+                    <p className="text-[10px] text-gray-400">Total Pengiriman</p>
+                    <p className="font-semibold text-gray-700 dark:text-gray-300">{a._count?.loadingOrders || 0} Rit</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-gray-400">Rating Rata-rata</p>
+                    <p className="font-semibold text-amber-500">⭐ {a.avgRating || '—'}</p>
+                  </div>
                 </div>
               </div>
-            </div>
-            <div className="flex items-center gap-2 mt-5 justify-end">
-              <button onClick={() => showReportCard(a.id)} className="btn-secondary py-1.5 px-3 text-xs flex items-center gap-1">
-                <BarChart3 className="w-3.5 h-3.5" /> Rapor Kinerja
-              </button>
-              <button onClick={() => handleEdit(a)} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-850 text-blue-500" title="Edit">
-                <Edit3 className="w-4 h-4" />
-              </button>
-              {a.isActive && (
-                <button onClick={() => handleDelete(a)} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-850 text-red-500" title="Nonaktifkan">
-                  <Trash2 className="w-4 h-4" />
+              <div className="flex items-center gap-2 mt-5 justify-end">
+                <button onClick={() => showReportCard(a.id)} className="btn-secondary py-1.5 px-3 text-xs flex items-center gap-1">
+                  <BarChart3 className="w-3.5 h-3.5" /> Rapor Kinerja
                 </button>
-              )}
+                <button onClick={() => handleEdit(a)} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-850 text-blue-500" title="Edit">
+                  <Edit3 className="w-4 h-4" />
+                </button>
+                {a.isActive && (
+                  <button onClick={() => handleDelete(a)} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-850 text-red-500" title="Nonaktifkan">
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
             </div>
+          ))}
+        </div>
+      ) : (
+        /* Table View */
+        <div className="table-container bg-white dark:bg-slate-900">
+          <table>
+            <thead>
+              <tr>
+                <th>NIP</th>
+                <th>Nama Lengkap</th>
+                <th>No. Telepon / WhatsApp</th>
+                <th>Total Pengiriman</th>
+                <th>Rating Rata-rata</th>
+                <th>Status</th>
+                <th className="text-right">Aksi</th>
+              </tr>
+            </thead>
+            <tbody>
+              {paginatedAmts.map(a => (
+                <tr key={a.id}>
+                  <td className="font-bold text-pertamina-blue dark:text-blue-400">{a.nip}</td>
+                  <td className="font-semibold text-gray-900 dark:text-white">{a.name}</td>
+                  <td>{a.phone || '—'}</td>
+                  <td>{a._count?.loadingOrders || 0} Rit</td>
+                  <td><span className="font-bold text-amber-500">⭐ {a.avgRating || '—'}</span></td>
+                  <td>
+                    <span className={`badge ${a.isActive ? 'badge-success' : 'badge-danger'}`}>
+                      {a.isActive ? 'Aktif' : 'Nonaktif'}
+                    </span>
+                  </td>
+                  <td>
+                    <div className="flex items-center justify-end gap-1">
+                      <button onClick={() => showReportCard(a.id)} className="btn-secondary py-1 px-2.5 text-xs flex items-center gap-1">
+                        <BarChart3 className="w-3.5 h-3.5" /> Rapor
+                      </button>
+                      <button onClick={() => handleEdit(a)} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-800 text-blue-500" title="Edit">
+                        <Edit3 className="w-4 h-4" />
+                      </button>
+                      {a.isActive && (
+                        <button onClick={() => handleDelete(a)} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-800 text-red-500" title="Nonaktifkan">
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Pagination Bar */}
+      {!loading && amts.length > 0 && (
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-2 py-1 text-xs text-gray-500">
+          <div>
+            Menampilkan <span className="font-semibold text-gray-900 dark:text-white">{((page - 1) * pageSize) + 1}</span> - <span className="font-semibold text-gray-900 dark:text-white">{Math.min(page * pageSize, amts.length)}</span> dari <span className="font-semibold text-gray-900 dark:text-white">{amts.length}</span> personil Awak MT
           </div>
-        ))}
-      </div>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              disabled={page <= 1}
+              onClick={() => setPage(p => p - 1)}
+              className="p-2 rounded-lg border border-gray-200 dark:border-slate-800 hover:bg-gray-100 dark:hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+            
+            <div className="flex items-center gap-1 px-2 font-medium text-gray-700 dark:text-gray-300">
+              Halaman <span className="font-bold text-pertamina-red dark:text-red-400">{page}</span> dari <span className="font-bold">{totalPages}</span>
+            </div>
+
+            <button
+              type="button"
+              disabled={page >= totalPages}
+              onClick={() => setPage(p => p + 1)}
+              className="p-2 rounded-lg border border-gray-200 dark:border-slate-800 hover:bg-gray-100 dark:hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Add/Edit Modal */}
       {showCreate && (

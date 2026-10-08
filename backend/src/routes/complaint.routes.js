@@ -27,6 +27,23 @@ router.get('/', authenticate, async (req, res) => {
       }
       where.feedback = { spbuId: req.user.spbuId };
     }
+    if (req.user.role === 'AMT') {
+      if (!req.user.amtId) {
+        return res.json({
+          success: true,
+          data: [],
+          pagination: { page: parseInt(page), limit: parseInt(limit), total: 0, totalPages: 0 },
+        });
+      }
+      where.feedback = {
+        lo: {
+          OR: [
+            { amtId: req.user.amtId },
+            { secondaryAmtId: req.user.amtId },
+          ],
+        },
+      };
+    }
 
     const [complaints, total] = await Promise.all([
       prisma.complaint.findMany({

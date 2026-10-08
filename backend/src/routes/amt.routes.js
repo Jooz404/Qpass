@@ -157,8 +157,8 @@ async function generateNIP() {
   return `${prefix}${String(nextSeq).padStart(5, '0')}`;
 }
 
-// GET /api/amt/generate-nip - Preview next NIP (ADMIN only)
-router.get('/generate-nip', authenticate, authorize('ADMIN'), async (req, res) => {
+// GET /api/amt/generate-nip - Preview next NIP (ADMIN & PENGAWAS)
+router.get('/generate-nip', authenticate, authorize('ADMIN', 'PENGAWAS'), async (req, res) => {
   try {
     const nip = await generateNIP();
     res.json({ success: true, data: { nip } });
@@ -168,7 +168,7 @@ router.get('/generate-nip', authenticate, authorize('ADMIN'), async (req, res) =
 });
 
 // GET /api/amt/by-nip/:nip - Lookup AMT by NIP (for linking user account)
-router.get('/by-nip/:nip', authenticate, authorize('ADMIN'), async (req, res) => {
+router.get('/by-nip/:nip', authenticate, authorize('ADMIN', 'PENGAWAS'), async (req, res) => {
   try {
     const amt = await prisma.amt.findUnique({
       where: { nip: req.params.nip },
@@ -187,7 +187,7 @@ router.get('/by-nip/:nip', authenticate, authorize('ADMIN'), async (req, res) =>
 });
 
 // POST /api/amt
-router.post('/', authenticate, authorize('ADMIN'), async (req, res) => {
+router.post('/', authenticate, authorize('ADMIN', 'PENGAWAS'), async (req, res) => {
   try {
     const { name, phone, nip } = req.body;
     if (!name || !name.trim()) {
@@ -223,7 +223,7 @@ router.post('/', authenticate, authorize('ADMIN'), async (req, res) => {
 });
 
 // PUT /api/amt/:id
-router.put('/:id', authenticate, authorize('ADMIN'), async (req, res) => {
+router.put('/:id', authenticate, authorize('ADMIN', 'PENGAWAS'), async (req, res) => {
   try {
     const { name, nip, phone, isActive } = req.body;
     const trimmedNip = nip ? nip.trim() : undefined;
@@ -260,7 +260,7 @@ router.put('/:id', authenticate, authorize('ADMIN'), async (req, res) => {
 });
 
 // DELETE /api/amt/:id
-router.delete('/:id', authenticate, authorize('ADMIN'), async (req, res) => {
+router.delete('/:id', authenticate, authorize('ADMIN', 'PENGAWAS'), async (req, res) => {
   try {
     await prisma.amt.update({ where: { id: parseInt(req.params.id) }, data: { isActive: false } });
     res.json({ success: true, message: 'AMT berhasil dinonaktifkan' });

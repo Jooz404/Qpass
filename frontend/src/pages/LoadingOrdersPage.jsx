@@ -165,35 +165,78 @@ export default function LoadingOrdersPage() {
         )}
       </div>
 
-      {/* Filters */}
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="relative flex-1 min-w-[200px]">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+      {/* Status Quick Tabs */}
+      <div className="flex flex-wrap gap-2 border-b border-gray-200 dark:border-slate-800 pb-3">
+        {[
+          { label: 'Semua Status', value: '' },
+          { label: '⏳ PENDING', value: 'PENDING' },
+          { label: '🚚 IN TRANSIT', value: 'IN_TRANSIT' },
+          { label: '📍 DELIVERED', value: 'DELIVERED' },
+          { label: '✅ COMPLETED', value: 'COMPLETED' },
+        ].map((tab) => {
+          const isActive = statusFilter === tab.value;
+          return (
+            <button
+              key={tab.value}
+              type="button"
+              onClick={() => { setStatusFilter(tab.value); setPagination(p => ({ ...p, page: 1 })); }}
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all duration-200 flex items-center gap-1.5 border ${
+                isActive
+                  ? 'bg-pertamina-red text-white border-pertamina-red shadow-sm'
+                  : 'bg-white dark:bg-slate-900 text-gray-600 dark:text-gray-400 border-gray-200 dark:border-slate-800 hover:bg-gray-50 dark:hover:bg-slate-850'
+              }`}
+            >
+              <span>{tab.label}</span>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Search & Date Controls */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="relative flex-1 min-w-[240px]">
+          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
           <input
             type="text"
             value={search}
             onChange={e => { setSearch(e.target.value); setPagination(p => ({ ...p, page: 1 })); }}
-            className="input-field pl-10 py-2.5"
-            placeholder="Cari No. LO atau produk..."
+            className="input-field pl-10 py-2.5 text-xs sm:text-sm"
+            placeholder="Cari No. LO, produk, SPBU..."
           />
         </div>
-        <select
-          value={statusFilter}
-          onChange={e => { setStatusFilter(e.target.value); setPagination(p => ({ ...p, page: 1 })); }}
-          className="input-field w-auto py-2.5"
-        >
-          <option value="">Semua Status</option>
-          <option value="PENDING">Pending</option>
-          <option value="IN_TRANSIT">In Transit</option>
-          <option value="DELIVERED">Delivered</option>
-          <option value="COMPLETED">Completed</option>
-        </select>
-        <input
-          type="date"
-          value={dateFilter}
-          onChange={e => { setDateFilter(e.target.value); setPagination(p => ({ ...p, page: 1 })); }}
-          className="input-field w-auto py-2.5"
-        />
+        <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+          <div className="flex items-center gap-1.5">
+            <input
+              type="date"
+              value={dateFilter}
+              onChange={e => { setDateFilter(e.target.value); setPagination(p => ({ ...p, page: 1 })); }}
+              className="input-field py-2 text-xs"
+            />
+            {dateFilter && (
+              <button
+                type="button"
+                onClick={() => { setDateFilter(''); setPagination(p => ({ ...p, page: 1 })); }}
+                className="btn-secondary py-2 px-2 text-xs text-gray-500 hover:text-red-500"
+                title="Tampilkan Semua Tanggal"
+              >
+                Semua
+              </button>
+            )}
+          </div>
+          <div className="flex items-center gap-1 text-xs text-gray-500 ml-auto sm:ml-2">
+            <span>Per hal:</span>
+            <select
+              value={pagination.limit || 15}
+              onChange={e => setPagination(p => ({ ...p, limit: Number(e.target.value), page: 1 }))}
+              className="input-field py-1.5 text-xs w-auto"
+            >
+              <option value={15}>15</option>
+              <option value={25}>25</option>
+              <option value={50}>50</option>
+              <option value={100}>100</option>
+            </select>
+          </div>
+        </div>
       </div>
 
       {/* Table */}
@@ -217,7 +260,7 @@ export default function LoadingOrdersPage() {
             {loading ? (
               <tr><td colSpan={10} className="text-center py-12"><div className="spinner mx-auto" /></td></tr>
             ) : orders.length === 0 ? (
-              <tr><td colSpan={10} className="text-center py-12 text-gray-500">Tidak ada data</td></tr>
+              <tr><td colSpan={10} className="text-center py-12 text-gray-500">Tidak ada data Loading Order</td></tr>
             ) : orders.map(lo => (
               <tr key={lo.id}>
                 <td className="font-semibold text-gray-900 dark:text-white whitespace-nowrap">{lo.noLO}</td>
@@ -273,22 +316,34 @@ export default function LoadingOrdersPage() {
         </table>
       </div>
 
-      {/* Pagination */}
-      {pagination.totalPages > 1 && (
-        <div className="flex items-center justify-between">
-          <p className="text-sm text-gray-500">Menampilkan {orders.length} dari {pagination.total} data</p>
-          <div className="flex items-center gap-2">
+      {/* Pagination Bar */}
+      {!loading && pagination.total > 0 && (
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-2 py-1 text-xs text-gray-500">
+          <div>
+            Menampilkan <span className="font-semibold text-gray-900 dark:text-white">{((pagination.page - 1) * pagination.limit) + 1}</span> - <span className="font-semibold text-gray-900 dark:text-white">{Math.min(pagination.page * pagination.limit, pagination.total)}</span> dari <span className="font-semibold text-gray-900 dark:text-white">{pagination.total}</span> data LO
+          </div>
+          <div className="flex items-center gap-1">
             <button
-              onClick={() => setPagination(p => ({ ...p, page: p.page - 1 }))}
+              type="button"
               disabled={pagination.page <= 1}
-              className="btn-secondary p-2 disabled:opacity-30"
-            ><ChevronLeft className="w-4 h-4" /></button>
-            <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{pagination.page}/{pagination.totalPages}</span>
+              onClick={() => setPagination(p => ({ ...p, page: p.page - 1 }))}
+              className="p-2 rounded-lg border border-gray-200 dark:border-slate-800 hover:bg-gray-100 dark:hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+            
+            <div className="flex items-center gap-1 px-2 font-medium text-gray-700 dark:text-gray-300">
+              Halaman <span className="font-bold text-pertamina-red dark:text-red-400">{pagination.page}</span> dari <span className="font-bold">{pagination.totalPages || 1}</span>
+            </div>
+
             <button
-              onClick={() => setPagination(p => ({ ...p, page: p.page + 1 }))}
+              type="button"
               disabled={pagination.page >= pagination.totalPages}
-              className="btn-secondary p-2 disabled:opacity-30"
-            ><ChevronRight className="w-4 h-4" /></button>
+              onClick={() => setPagination(p => ({ ...p, page: p.page + 1 }))}
+              className="p-2 rounded-lg border border-gray-200 dark:border-slate-800 hover:bg-gray-100 dark:hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
           </div>
         </div>
       )}

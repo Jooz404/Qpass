@@ -131,6 +131,19 @@ export default function MapPage() {
       }
     });
 
+    socket.on('spbu-rating-updated', (data) => {
+      setSpbuMarkers(prev => prev.map(spbu => {
+        if (spbu.id === data.spbuId) {
+          return {
+            ...spbu,
+            averageRating: data.averageRating,
+            hasComplaint: data.hasComplaint !== undefined ? data.hasComplaint : spbu.hasComplaint
+          };
+        }
+        return spbu;
+      }));
+    });
+
     return () => {
       socket.disconnect();
     };

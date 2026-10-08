@@ -76,13 +76,33 @@ export default function FeedbackHistoryPage() {
       const params = { ...filters };
       Object.keys(params).forEach(k => !params[k] && delete params[k]);
       const res = await api.get(`/export/feedback/${type}`, { params, responseType: 'blob' });
-      const url = window.URL.createObjectURL(new Blob([res.data]));
+      const blob = new Blob([res.data], {
+        type: type === 'excel'
+          ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+          : 'application/pdf'
+      });
+      const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `QPass_Feedback.${type === 'excel' ? 'xlsx' : 'pdf'}`;
+      a.download = `QPass_Feedback_${Date.now()}.${type === 'excel' ? 'xlsx' : 'pdf'}`;
+      document.body.appendChild(a);
       a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
       toast.success(`Export ${type.toUpperCase()} berhasil`);
-    } catch { toast.error('Export gagal'); }
+    } catch (err) {
+      let message = 'Export gagal';
+      if (err.response?.data instanceof Blob) {
+        try {
+          const text = await err.response.data.text();
+          const json = JSON.parse(text);
+          message = json.message || message;
+        } catch (_) {}
+      } else if (err.response?.data?.message) {
+        message = err.response.data.message;
+      }
+      toast.error(message);
+    }
   };
 
   return (
@@ -104,23 +124,84 @@ export default function FeedbackHistoryPage() {
         </div>
       </div>
 
-      {/* Filters */}
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="relative flex-1 min-w-[200px]">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+      {/* Status Quick Tabs */}
+      <div className="flex flex-wrap gap-2 border-b border-gray-200 dark:border-slate-800 pb-3">
+        {[
+          { label: 'Semua Feedback', value: '' },
+          { label: '✅ Normal', value: 'NORMAL' },
+          { label: '🚨 High Priority / Kritis', value: 'HIGH_PRIORITY' },
+        ].map((tab) => {
+          const isActive = filters.status === tab.value;
+          return (
+            <button
+              key={tab.value}
+              type="button"
+              onClick={() => { setFilters(f => ({ ...f, status: tab.value })); setPagination(p => ({ ...p, page: 1 })); }}
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all duration-200 border ${
+                isActive
+                  ? 'bg-pertamina-red text-white border-pertamina-red shadow-sm'
+                  : 'bg-white dark:bg-slate-900 text-gray-600 dark:text-gray-400 border-gray-200 dark:border-slate-800 hover:bg-gray-50 dark:hover:bg-slate-850'
+              }`}
+            >
+              {tab.label}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Filters & Page Limit */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="relative flex-1 min-w-[240px]">
+          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
           <input
-            type="text" value={filters.search}
+            type="text"
+            value={filters.search}
             onChange={e => { setFilters(f => ({ ...f, search: e.target.value })); setPagination(p => ({ ...p, page: 1 })); }}
-            className="input-field pl-10 py-2.5" placeholder="Cari No. LO..."
+            className="input-field pl-10 py-2.5 text-xs sm:text-sm"
+            placeholder="Cari No. LO, SPBU, Nopol..."
           />
         </div>
-        <select value={filters.status} onChange={e => { setFilters(f => ({ ...f, status: e.target.value })); setPagination(p => ({ ...p, page: 1 })); }} className="input-field w-auto py-2.5">
-          <option value="">Semua Status</option>
-          <option value="NORMAL">Normal</option>
-          <option value="HIGH_PRIORITY">High Priority</option>
-        </select>
-        <input type="date" value={filters.startDate} onChange={e => { setFilters(f => ({ ...f, startDate: e.target.value })); setPagination(p => ({ ...p, page: 1 })); }} className="input-field w-auto py-2.5" />
-        <input type="date" value={filters.endDate} onChange={e => { setFilters(f => ({ ...f, endDate: e.target.value })); setPagination(p => ({ ...p, page: 1 })); }} className="input-field w-auto py-2.5" />
+        <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+          <div className="flex items-center gap-1.5 text-xs text-gray-500">
+            <span>Dari:</span>
+            <input
+              type="date"
+              value={filters.startDate}
+              onChange={e => { setFilters(f => ({ ...f, startDate: e.target.value })); setPagination(p => ({ ...p, page: 1 })); }}
+              className="input-field py-2 text-xs"
+            />
+            <span>Sampai:</span>
+            <input
+              type="date"
+              value={filters.endDate}
+              onChange={e => { setFilters(f => ({ ...f, endDate: e.target.value })); setPagination(p => ({ ...p, page: 1 })); }}
+              className="input-field py-2 text-xs"
+            />
+            {(filters.startDate || filters.endDate) && (
+              <button
+                type="button"
+                onClick={() => { setFilters(f => ({ ...f, startDate: '', endDate: '' })); setPagination(p => ({ ...p, page: 1 })); }}
+                className="btn-secondary py-2 px-2 text-xs text-gray-500 hover:text-red-500"
+                title="Reset Tanggal"
+              >
+                Reset
+              </button>
+            )}
+          </div>
+          <div className="flex items-center gap-1 text-xs text-gray-500 ml-auto sm:ml-2">
+            <span>Per hal:</span>
+            <select
+              value={pagination.limit || 15}
+              onChange={e => setPagination(p => ({ ...p, limit: Number(e.target.value), page: 1 }))}
+              className="input-field py-1.5 text-xs w-auto"
+            >
+              <option value={15}>15</option>
+              <option value={25}>25</option>
+              <option value={50}>50</option>
+              <option value={100}>100</option>
+            </select>
+          </div>
+        </div>
       </div>
 
       {/* Table */}
@@ -148,7 +229,7 @@ export default function FeedbackHistoryPage() {
             {loading ? (
               <tr><td colSpan={14} className="text-center py-12"><div className="spinner mx-auto" /></td></tr>
             ) : feedbacks.length === 0 ? (
-              <tr><td colSpan={14} className="text-center py-12 text-gray-500">Tidak ada data</td></tr>
+              <tr><td colSpan={14} className="text-center py-12 text-gray-500">Tidak ada data feedback</td></tr>
             ) : feedbacks.map(fb => (
               <tr key={fb.id}>
                 <td className="whitespace-nowrap text-xs">{fb.submittedAt ? new Date(fb.submittedAt).toLocaleString('id-ID') : '-'}</td>
@@ -180,16 +261,32 @@ export default function FeedbackHistoryPage() {
         </table>
       </div>
 
-      {/* Pagination */}
-      {pagination.totalPages > 1 && (
-        <div className="flex items-center justify-between">
-          <p className="text-sm text-gray-500">{feedbacks.length} dari {pagination.total} data</p>
-          <div className="flex items-center gap-2">
-            <button onClick={() => setPagination(p => ({ ...p, page: p.page - 1 }))} disabled={pagination.page <= 1} className="btn-secondary p-2 disabled:opacity-30">
+      {/* Pagination Bar */}
+      {!loading && pagination.total > 0 && (
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-2 py-1 text-xs text-gray-500">
+          <div>
+            Menampilkan <span className="font-semibold text-gray-900 dark:text-white">{((pagination.page - 1) * (pagination.limit || 15)) + 1}</span> - <span className="font-semibold text-gray-900 dark:text-white">{Math.min(pagination.page * (pagination.limit || 15), pagination.total)}</span> dari <span className="font-semibold text-gray-900 dark:text-white">{pagination.total}</span> data feedback
+          </div>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              disabled={pagination.page <= 1}
+              onClick={() => setPagination(p => ({ ...p, page: p.page - 1 }))}
+              className="p-2 rounded-lg border border-gray-200 dark:border-slate-800 hover:bg-gray-100 dark:hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+            >
               <ChevronLeft className="w-4 h-4" />
             </button>
-            <span className="text-sm font-medium">{pagination.page}/{pagination.totalPages}</span>
-            <button onClick={() => setPagination(p => ({ ...p, page: p.page + 1 }))} disabled={pagination.page >= pagination.totalPages} className="btn-secondary p-2 disabled:opacity-30">
+            
+            <div className="flex items-center gap-1 px-2 font-medium text-gray-700 dark:text-gray-300">
+              Halaman <span className="font-bold text-pertamina-red dark:text-red-400">{pagination.page}</span> dari <span className="font-bold">{pagination.totalPages || 1}</span>
+            </div>
+
+            <button
+              type="button"
+              disabled={pagination.page >= pagination.totalPages}
+              onClick={() => setPagination(p => ({ ...p, page: p.page + 1 }))}
+              className="p-2 rounded-lg border border-gray-200 dark:border-slate-800 hover:bg-gray-100 dark:hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+            >
               <ChevronRight className="w-4 h-4" />
             </button>
           </div>

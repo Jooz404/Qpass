@@ -9,3 +9,6 @@ export { default as userService } from './userService';
 export { default as dashboardService } from './dashboardService';
 export { default as complaintService } from './complaintService';
 export { default as notificationService } from './notificationService';
+export { default as qualityControlService } from './qualityControlService';
+export { default as vesselDischargeService } from './vesselDischargeService';
+

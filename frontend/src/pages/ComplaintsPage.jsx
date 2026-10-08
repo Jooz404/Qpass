@@ -2,15 +2,17 @@ import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import api from '../services/api';
-import { AlertTriangle, CheckCircle, Clock, Eye, X, MessageSquare, ShieldAlert } from 'lucide-react';
+import { AlertTriangle, CheckCircle, Clock, Eye, X, MessageSquare, ShieldAlert, Search, ChevronLeft, ChevronRight } from 'lucide-react';
 
 export default function ComplaintsPage() {
   const toast = useToast();
   const { user } = useAuth();
   const [complaints, setComplaints] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [pagination, setPagination] = useState({ page: 1, totalPages: 1, total: 0 });
+  const [pagination, setPagination] = useState({ page: 1, limit: 15, totalPages: 1, total: 0 });
   const [statusFilter, setStatusFilter] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [pageSize, setPageSize] = useState(15);
   
   // Modal states
   const [detail, setDetail] = useState(null);
@@ -18,34 +20,25 @@ export default function ComplaintsPage() {
   const [resolveNote, setResolveNote] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-  const fetchComplaints = useCallback(async () => {
+  const fetchComplaints = useCallback(async (page = 1) => {
     setLoading(true);
     try {
-      const params = { page: pagination.page, limit: 15 };
+      const params = { page, limit: pageSize };
       if (statusFilter) params.status = statusFilter;
+      if (searchQuery) params.search = searchQuery;
+      
       const res = await api.get('/complaints', { params });
-      
-      let filteredComplaints = res.data.data;
-      
-      // Filter complaints for AMT - only show complaints related to their LOs
-      if (user?.role === 'AMT') {
-        filteredComplaints = filteredComplaints.filter(c => 
-          c.feedback?.lo?.amtId === user?.amtId || 
-          c.feedback?.lo?.secondaryAmtId === user?.amtId
-        );
-      }
-      
-      setComplaints(filteredComplaints);
+      setComplaints(res.data.data);
       setPagination(res.data.pagination);
     } catch {
       toast.error('Gagal memuat data keluhan');
     } finally {
       setLoading(false);
     }
-  }, [pagination.page, statusFilter, user?.role, user?.amtId]);
+  }, [statusFilter, searchQuery, pageSize]);
 
   useEffect(() => {
-    fetchComplaints();
+    fetchComplaints(1);
   }, [fetchComplaints]);
 
   const handleResolve = async (e) => {
@@ -60,13 +53,20 @@ export default function ComplaintsPage() {
       toast.success('Keluhan berhasil diselesaikan');
       setResolveModal(null);
       setResolveNote('');
-      fetchComplaints();
+      fetchComplaints(pagination.page);
     } catch (err) {
       toast.error(err.response?.data?.message || 'Gagal menyelesaikan keluhan');
     } finally {
       setSubmitting(false);
     }
   };
+
+  const statusTabs = [
+    { label: 'Semua Status', value: '', badgeClass: 'bg-gray-100 dark:bg-slate-800 text-gray-700 dark:text-gray-300' },
+    { label: '🚨 OPEN (Kritis)', value: 'OPEN', badgeClass: 'bg-red-100 dark:bg-red-950/40 text-red-700 dark:text-red-400' },
+    { label: '⏳ IN PROGRESS', value: 'IN_PROGRESS', badgeClass: 'bg-amber-100 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400' },
+    { label: '✅ RESOLVED', value: 'RESOLVED', badgeClass: 'bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400' },
+  ];
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -78,19 +78,52 @@ export default function ComplaintsPage() {
         <p className="text-sm text-gray-500">Tindaklanjuti keluhan dan laporan kritis dari SPBU</p>
       </div>
 
-      {/* Filters */}
-      <div className="flex items-center gap-3">
-        <select
-          value={statusFilter}
-          onChange={e => { setStatusFilter(e.target.value); setPagination(p => ({ ...p, page: 1 })); }}
-          className="input-field w-auto py-2"
-        >
-          <option value="">Semua Status</option>
-          <option value="OPEN">Open</option>
-          <option value="IN_PROGRESS">In Progress</option>
-          <option value="RESOLVED">Resolved</option>
-          <option value="CLOSED">Closed</option>
-        </select>
+      {/* Status Filter Tabs */}
+      <div className="flex flex-wrap gap-2 border-b border-gray-200 dark:border-slate-800 pb-3">
+        {statusTabs.map((tab) => {
+          const isActive = statusFilter === tab.value;
+          return (
+            <button
+              key={tab.value}
+              type="button"
+              onClick={() => setStatusFilter(tab.value)}
+              className={`px-4 py-2 rounded-xl text-xs font-semibold transition-all duration-200 flex items-center gap-2 border ${
+                isActive
+                  ? 'bg-pertamina-red text-white border-pertamina-red shadow-sm'
+                  : 'bg-white dark:bg-slate-900 text-gray-600 dark:text-gray-400 border-gray-200 dark:border-slate-800 hover:bg-gray-50 dark:hover:bg-slate-850'
+              }`}
+            >
+              <span>{tab.label}</span>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Search & Limit Controls */}
+      <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-3">
+        <div className="relative flex-1 max-w-md">
+          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Cari No. LO, SPBU, atau Deskripsi..."
+            className="input-field pl-10 py-2.5"
+          />
+        </div>
+        <div className="flex items-center gap-2 text-xs text-gray-500 justify-end">
+          <span>Tampilkan per halaman:</span>
+          <select
+            value={pageSize}
+            onChange={(e) => setPageSize(Number(e.target.value))}
+            className="input-field w-auto py-1.5 text-xs"
+          >
+            <option value={15}>15</option>
+            <option value={25}>25</option>
+            <option value={50}>50</option>
+            <option value={100}>100</option>
+          </select>
+        </div>
       </div>
 
       {/* Table */}
@@ -111,7 +144,7 @@ export default function ComplaintsPage() {
             {loading ? (
               <tr><td colSpan={7} className="text-center py-12"><div className="spinner mx-auto" /></td></tr>
             ) : complaints.length === 0 ? (
-              <tr><td colSpan={7} className="text-center py-12 text-gray-500">Tidak ada keluhan saat ini</td></tr>
+              <tr><td colSpan={7} className="text-center py-12 text-gray-500">Tidak ada keluhan ditemukan</td></tr>
             ) : complaints.map(c => (
               <tr key={c.id}>
                 <td className="whitespace-nowrap text-xs">{new Date(c.createdAt).toLocaleString('id-ID')}</td>
@@ -150,6 +183,38 @@ export default function ComplaintsPage() {
           </tbody>
         </table>
       </div>
+
+      {/* Pagination Bar */}
+      {!loading && pagination.total > 0 && (
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-2 py-1 text-xs text-gray-500">
+          <div>
+            Menampilkan <span className="font-semibold text-gray-900 dark:text-white">{((pagination.page - 1) * pagination.limit) + 1}</span> - <span className="font-semibold text-gray-900 dark:text-white">{Math.min(pagination.page * pagination.limit, pagination.total)}</span> dari <span className="font-semibold text-gray-900 dark:text-white">{pagination.total}</span> keluhan
+          </div>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              disabled={pagination.page <= 1}
+              onClick={() => fetchComplaints(pagination.page - 1)}
+              className="p-2 rounded-lg border border-gray-200 dark:border-slate-800 hover:bg-gray-100 dark:hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+            
+            <div className="flex items-center gap-1 px-2 font-medium text-gray-700 dark:text-gray-300">
+              Halaman <span className="font-bold text-pertamina-red dark:text-red-400">{pagination.page}</span> dari <span className="font-bold">{pagination.totalPages || 1}</span>
+            </div>
+
+            <button
+              type="button"
+              disabled={pagination.page >= pagination.totalPages}
+              onClick={() => fetchComplaints(pagination.page + 1)}
+              className="p-2 rounded-lg border border-gray-200 dark:border-slate-800 hover:bg-gray-100 dark:hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Detail Modal */}
       {detail && (

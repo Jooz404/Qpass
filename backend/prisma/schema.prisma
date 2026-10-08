@@ -83,6 +83,8 @@ model User {
   complaints    Complaint[]  @relation("ResolvedBy")
   auditLogs     AuditLog[]
   notifications Notification[]
+  qualityControls QualityControl[]
+  vesselDischarges VesselDischarge[]
 
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
@@ -177,6 +179,7 @@ model LoadingOrder {
   feedback      Feedback?
   amtFeedbacks  AMTFeedback[]
   locationLogs  AmtLocationLog[]
+  qualityControls QualityControl[]
 
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
@@ -335,4 +338,146 @@ model AmtLocationLog {
 
   @@map("amt_location_logs")
 }
+
+// ============================================
+// QUALITY CONTROL ENUMS & MODEL
+// ============================================
+
+enum QualityControlStage {
+  VESSEL_DISCHARGE   // Tahap 1: Discharge Kapal Tanker
+  STORAGE_TANK       // Tahap 2: Tangki Timbun Terminal
+  FILLING_SHED_TRUCK // Tahap 3: Mobil Tanki / Loading Order
+}
+
+enum QualityControlStatus {
+  PASSED
+  OFF_SPEC
+  PENDING
+  HOLD
+}
+
+model QualityControl {
+  id              Int                  @id @default(autoincrement())
+  stage           QualityControlStage  @default(VESSEL_DISCHARGE)
+  product         String               // Pertalite, Pertamax, Biosolar, Dexlite, dll.
+  batchNo         String?              // No. B/L, Batch, No. Tangki, No. LO
+  sourceName      String               // Nama Kapal, No. Tangki Timbun, Nopol Mobil Tanki
+
+  // Parameter Kualitas
+  densityObserved Float?               // kg/m³ Observed
+  temperature     Float?               // °C
+  density15C      Float                // kg/m³ Standard 15°C
+  visualCondition VisualCondition      @default(JERNIH)
+  waterContent    Float?               // ppm or mm
+  flashPoint      Float?               // °C (opsional)
+
+  // Meta & Inspector
+  sampleDate      DateTime             @default(now())
+  inspectorName   String               // Inspector QQ / Admin
+  notes           String?              @db.Text
+  certificateUrl  String?              // File scan / dokumen
+  status          QualityControlStatus @default(PASSED)
+  isOffSpec       Boolean              @default(false)
+
+  // Relations
+  loId            Int?
+  lo              LoadingOrder?        @relation(fields: [loId], references: [id], onDelete: SetNull)
+  createdById     Int?
+  createdBy       User?                @relation(fields: [createdById], references: [id], onDelete: SetNull)
+
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+
+  @@map("quality_controls")
+}
+
+// ============================================
+// CQD & VESSEL DISCHARGE MODELS
+// ============================================
+
+model VesselDischarge {
+  id                    Int       @id @default(autoincrement())
+  noLODischarge         String    @unique // No. LO Discharge / ID Kargo Discharge (e.g. LO-DISCH-20260826-001)
+  vesselName            String    // Nama Kapal / Tongkang (e.g. BG. AME IX)
+  loadedAt              String    // Pelabuhan Asal (e.g. PT. KUTAI REFINERY NUSANTARA/PSO)
+  dischargeAt           String    @default("1419 Integrated Terminal Bitung")
+  externalNo            String?   // External / BL Reference No
+  bastNumber            String?   // No. BAST (e.g. 503)
+  materialNo            String?   // Material No (e.g. A040900014/BIOFAME)
+  poNumber              String?   // PO Number (e.g. 5250015489)
+  product               String    // Product Name (BIOFAME, Pertalite, Biosolar, Dexlite)
+  psoType               String?   @default("PSO") // PSO / Non-PSO
+  cqdDate               DateTime  @default(now())
+  cqdTime               String?   // Time string (e.g. 14.10.46)
+
+  // Bill of Lading (B/L) Quantities
+  blQuantityLitersObs   Float?    // Liters Obs
+  blQuantityLiters15    Float?    // Liters @ 15°C (Main Pertamina Benchmark)
+  blQuantityMetricTon   Float?    // Metric Ton
+  blQuantityBarrels60F  Float?    // Barrels @ 60°F
+
+  // Received In Shore Tank Quantities (Calculated or Sum of Tanks)
+  totalReceivedLitersObs Float?
+  totalReceivedLiters15  Float?
+  totalReceivedMetricTon Float?
+
+  // Shortage / Excess vs B/L
+  shortageLitersObs     Float?
+  shortageLiters15      Float?
+  shortageMetricTon     Float?
+  percentageVsBL        Float?    // % VS B/L (e.g. -0.967)
+  isToleranceExceeded   Boolean   @default(false) // True if % VS B/L exceeds tolerance (e.g. < -0.5%)
+
+  // Additional Details & Signatures
+  remarks               String?   @db.Text
+  loadingPort           String?   // Loading Port Signatory (e.g. PT KRN - Agung Priyadi)
+  surveyorBy            String?   // Surveyor Signatory (e.g. PT TRS - Kamarudin)
+  preparedBy            String?   // Spv Fuel Rec & Sto (e.g. Nasrul)
+  checkedBy             String?   // Loading Master (e.g. Ujang Muhidin)
+  acknowledgeBy         String?   // IT Manager Bitung (e.g. Arman Prastiono)
+
+  // Creator & Relations
+  createdById           Int?
+  createdBy             User?     @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  tanks                 VesselDischargeTank[]
+
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@map("vessel_discharges")
+}
+
+model VesselDischargeTank {
+  id                    Int             @id @default(autoincrement())
+  vesselDischargeId     Int
+  vesselDischarge       VesselDischarge @relation(fields: [vesselDischargeId], references: [id], onDelete: Cascade)
+
+  tankNo                String          // No. Tangki Darat (e.g. Tank 5, Tank 8)
+  indication            String          @default("NET") // AFTER, BEFORE, NET
+  date                  DateTime?
+  time                  String?         // Waktu (e.g. 04.46)
+
+  // Shore Sample Data
+  testDensity           Float?          // Test Dens
+  testTemp              Float?          // Test Temp (°C)
+  density15C            Float?          // Dens 15°C
+
+  // Product in Shore Tank Measurements
+  totalDip              Float?          // Total Dip (cm / mm)
+  waterDip              Float?          @default(0) // Water Dip
+  tempObs               Float?          // Temp Obs (°C)
+  netProductObsL        Float?          // Net Product (Obs) Liters
+  correction            Float?          // Correction Factor (e.g. 0.988276)
+  liters15              Float?          // Liters @ 15°C
+  longTonsPer1000L      Float?          // Long Tons per 1000 L
+  longTons              Float?          // Long Tons
+  barrels60F            Float?          // Barrels @ 60°F
+  metricTon             Float?          // Metric Ton
+
+  createdAt             DateTime        @default(now())
+  updatedAt             DateTime        @updatedAt
+
+  @@map("vessel_discharge_tanks")
+}
+
 

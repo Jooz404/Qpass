@@ -24,10 +24,13 @@ router.get('/', authenticate, authorize('ADMIN', 'PENGAWAS', 'SPBU'), async (req
         where,
         include: {
           _count: {
-            select: { loadingOrders: true, feedbacks: true },
+            select: { loadingOrders: true, feedbacks: true, amtFeedbacks: true },
           },
           feedbacks: {
             select: { rating: true }
+          },
+          amtFeedbacks: {
+            select: { ratingKeseluruhan: true }
           }
         },
         orderBy: { name: 'asc' },
@@ -38,11 +41,15 @@ router.get('/', authenticate, authorize('ADMIN', 'PENGAWAS', 'SPBU'), async (req
     ]);
 
     const spbusWithRating = spbus.map(spbu => {
-      const totalRating = spbu.feedbacks.reduce((sum, f) => sum + f.rating, 0);
-      const avgRating = spbu.feedbacks.length > 0 ? (totalRating / spbu.feedbacks.length) : 0;
+      const spbuRatings = (spbu.feedbacks || []).map(f => f.rating);
+      const amtRatings = (spbu.amtFeedbacks || []).map(af => af.ratingKeseluruhan);
+      const allRatings = [...spbuRatings, ...amtRatings];
+
+      const totalRating = allRatings.reduce((sum, r) => sum + r, 0);
+      const avgRating = allRatings.length > 0 ? (totalRating / allRatings.length) : 0;
       
-      // Remove feedbacks array and just return the average
-      const { feedbacks, ...rest } = spbu;
+      // Remove raw feedback arrays and return computed average
+      const { feedbacks, amtFeedbacks, ...rest } = spbu;
       return {
         ...rest,
         averageRating: avgRating

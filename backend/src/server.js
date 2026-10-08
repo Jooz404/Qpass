@@ -100,6 +100,8 @@ app.use('/api/complaints', require('./routes/complaint.routes'));
 app.use('/api/dashboard', require('./routes/dashboard.routes'));
 app.use('/api/export', require('./routes/export.routes'));
 app.use('/api/notifications', require('./routes/notification.routes'));
+app.use('/api/quality-control', require('./routes/quality-control.routes'));
+app.use('/api/vessel-discharge', require('./routes/vessel-discharge.routes'));
 
 // Health check
 app.get('/api/health', (req, res) => {

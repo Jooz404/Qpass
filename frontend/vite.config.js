@@ -43,9 +43,18 @@ export default defineConfig({
     host: '0.0.0.0',
     port: 3001,
     allowedHosts: true,
+    hmr: {
+      clientPort: 443,
+    },
     proxy: {
       '/api': {
         target: 'http://localhost:5002',
+        changeOrigin: true,
+        secure: false,
+      },
+      '/socket.io': {
+        target: 'http://localhost:5002',
+        ws: true,
         changeOrigin: true,
         secure: false,
       },

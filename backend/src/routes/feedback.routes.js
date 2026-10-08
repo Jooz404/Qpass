@@ -113,6 +113,22 @@ router.post('/', upload.single('photo'), async (req, res) => {
     // Emit real-time event via Socket.IO
     const io = req.app.get('io');
     if (io) {
+      const [spbuFeedbacks, amtFeedbacks] = await Promise.all([
+        prisma.feedback.findMany({ where: { spbuId: lo.spbuId }, select: { rating: true } }),
+        prisma.aMTFeedback.findMany({ where: { spbuId: lo.spbuId }, select: { ratingKeseluruhan: true } })
+      ]);
+      const allRatings = [
+        ...spbuFeedbacks.map(f => f.rating),
+        ...amtFeedbacks.map(af => af.ratingKeseluruhan)
+      ];
+      const avgRating = allRatings.length > 0 ? (allRatings.reduce((a, b) => a + b, 0) / allRatings.length) : 0;
+
+      io.to('dashboard').emit('spbu-rating-updated', {
+        spbuId: lo.spbuId,
+        averageRating: avgRating,
+        hasComplaint: isHighPriority
+      });
+
       io.to('dashboard').emit('new-feedback', {
         id: feedback.id,
         noLO: lo.noLO,
