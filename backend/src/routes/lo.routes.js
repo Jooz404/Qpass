@@ -288,8 +288,17 @@ router.post('/generate-daily', authenticate, authorize('ADMIN', 'PENGAWAS'), asy
     const trucks = await prisma.truck.findMany({ where: { isActive: true } });
     const amts = await prisma.amt.findMany({ where: { isActive: true } });
 
-    const products = ['Pertalite', 'Pertamax', 'Pertamax Turbo', 'Dexlite', 'Pertamina Dex'];
-    const volumes = { 'Pertalite': 8000, 'Pertamax': 8000, 'Pertamax Turbo': 8000, 'Dexlite': 8000, 'Pertamina Dex': 8000 };
+    const products = ['Pertalite', 'Pertamax', 'Pertamax Turbo', 'Dexlite', 'Pertamina Dex', 'Solar B50', 'Avtur', 'Kerosene'];
+    const volumes = {
+      'Pertalite': 8000,
+      'Pertamax': 8000,
+      'Pertamax Turbo': 8000,
+      'Dexlite': 8000,
+      'Pertamina Dex': 8000,
+      'Solar B50': 8000,
+      'Avtur': 8000,
+      'Kerosene': 8000,
+    };
 
     const created = [];
     let counter = 1;

@@ -20,7 +20,7 @@ const STAGES = [
   { id: 'FILLING_SHED_TRUCK', label: 'Mobil Tanki & LO SPBU', icon: Truck, color: 'emerald', desc: 'Quality check sebelum pengisian Mobil Tanki' },
 ];
 
-const PRODUCTS = ['BIOFAME', 'BIOSOLAR B50', 'PERTALITE', 'DEXLITE', 'PERTAMAX', 'AVTUR'];
+const PRODUCTS = ['BIOFAME', 'BIOSOLAR B50', 'SOLAR B50', 'PERTALITE', 'DEXLITE', 'PERTAMAX', 'AVTUR', 'KEROSENE'];
 
 function getDensitySpec(product) {
   const p = (product || '').toUpperCase();
@@ -28,6 +28,8 @@ function getDensitySpec(product) {
     return { min: 815, max: 870, label: '815 - 870 kg/m³' };
   } else if (p.includes('AVTUR')) {
     return { min: 775, max: 840, label: '775 - 840 kg/m³' };
+  } else if (p.includes('KEROSENE') || p.includes('MINYAK TANAH')) {
+    return { min: 790, max: 835, label: '790 - 835 kg/m³' };
   }
   return { min: 715, max: 770, label: '715 - 770 kg/m³' };
 }

@@ -202,10 +202,12 @@ export default function CQDFormModal({ isOpen, onClose, onSubmit, isLoading }) {
                 >
                   <option value="BIOFAME">BIOFAME</option>
                   <option value="BIOSOLAR B50">BIOSOLAR B50</option>
+                  <option value="SOLAR B50">SOLAR B50</option>
                   <option value="PERTALITE">PERTALITE</option>
                   <option value="DEXLITE">DEXLITE</option>
                   <option value="PERTAMAX">PERTAMAX</option>
                   <option value="AVTUR">AVTUR</option>
+                  <option value="KEROSENE">KEROSENE</option>
                 </select>
               </div>
 

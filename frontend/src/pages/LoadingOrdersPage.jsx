@@ -170,7 +170,7 @@ export default function LoadingOrdersPage() {
     }
   };
 
-  const products = ['Pertalite', 'Pertamax', 'Pertamax Turbo', 'Dexlite', 'Pertamina Dex'];
+  const products = ['Pertalite', 'Pertamax', 'Pertamax Turbo', 'Dexlite', 'Pertamina Dex', 'Solar B50', 'Avtur', 'Kerosene'];
 
   return (
     <div className="space-y-6 animate-fade-in">
