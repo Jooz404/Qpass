@@ -1,1 +1,43 @@
-node_modules
+# Dependency folders
+node_modules/
+backend/node_modules/
+frontend/node_modules/
+
+# Environment and sensitive data
+.env
+.env.*
+*.pem
+*.key
+scripts/
+
+# Logs & Temporary result files
+*.log
+*_log.txt
+*_result.txt
+vps_info*.txt
+vps_check_output*.txt
+pg_inspection.txt
+
+# Database dumps
+*.sql
+
+# Python cache & virtual environments
+__pycache__/
+*.pyc
+venv/
+.venv/
+
+# Build & Dist outputs
+dist/
+build/
+.next/
+out/
+*.mjs
+*.timestamp*
+
+# OS / Editor temporary files & binaries
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.exe

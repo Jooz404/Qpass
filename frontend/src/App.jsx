@@ -95,7 +95,7 @@ export default function App() {
               } />
 
               <Route path="/scan-qr" element={
-                <PrivateRoute>
+                <PrivateRoute roles={['ADMIN', 'SPBU']}>
                   <DashboardLayout>
                     <ScanQRPage />
                   </DashboardLayout>
@@ -103,7 +103,7 @@ export default function App() {
               } />
               
               <Route path="/monitoring" element={
-                <PrivateRoute>
+                <PrivateRoute roles={['ADMIN', 'PENGAWAS']}>
                   <DashboardLayout>
                     <MonitoringPage />
                   </DashboardLayout>
@@ -111,7 +111,7 @@ export default function App() {
               } />
 
               <Route path="/loading-orders" element={
-                <PrivateRoute>
+                <PrivateRoute roles={['ADMIN', 'PENGAWAS']}>
                   <DashboardLayout>
                     <LoadingOrdersPage />
                   </DashboardLayout>
@@ -151,7 +151,7 @@ export default function App() {
               } />
 
               <Route path="/map" element={
-                <PrivateRoute>
+                <PrivateRoute roles={['ADMIN', 'PENGAWAS']}>
                   <DashboardLayout>
                     <MapPage />
                   </DashboardLayout>
@@ -167,7 +167,7 @@ export default function App() {
               } />
 
               <Route path="/trucks" element={
-                <PrivateRoute>
+                <PrivateRoute roles={['ADMIN', 'PENGAWAS']}>
                   <DashboardLayout>
                     <TrucksPage />
                   </DashboardLayout>
@@ -175,7 +175,7 @@ export default function App() {
               } />
 
               <Route path="/amt" element={
-                <PrivateRoute>
+                <PrivateRoute roles={['ADMIN', 'PENGAWAS']}>
                   <DashboardLayout>
                     <AmtPage />
                   </DashboardLayout>

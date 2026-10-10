@@ -102,7 +102,11 @@ export default function MapPage() {
 
     socket.on('amt-location-update', (data) => {
       setActiveTrucks(prev => {
-        const index = prev.findIndex(t => t.amt?.id === data.amtId || t.loId === data.loId);
+        const index = prev.findIndex(t => 
+          (data.amtId && t.amt?.id === data.amtId) || 
+          (data.truckNopol && t.truck?.nopol === data.truckNopol) ||
+          (data.loId && t.loId === data.loId)
+        );
         const updatedItem = {
           loId: data.loId,
           noLO: data.noLO || 'LO-IN-TRANSIT',

@@ -24,6 +24,7 @@ router.get('/my-lo', authenticate, authorize('AMT'), async (req, res) => {
         where,
         include: {
           spbu: { select: { id: true, name: true, code: true, address: true } },
+          originalSpbu: { select: { id: true, name: true, code: true } },
           truck: { select: { id: true, nopol: true, capacity: true } },
           amt: { select: { id: true, name: true } },
           secondaryAmt: { select: { id: true, name: true } },

@@ -5,7 +5,7 @@ import { useToast } from '../context/ToastContext';
 import api from '../services/api';
 import {
   Plus, Search, QrCode, Eye, Edit3, Trash2, Download, RefreshCw,
-  ChevronLeft, ChevronRight, X, Calendar, Filter,
+  ChevronLeft, ChevronRight, X, Calendar, Filter, ArrowRightLeft, AlertTriangle,
 } from 'lucide-react';
 import ConfirmModal from '../components/ConfirmModal';
 
@@ -23,6 +23,9 @@ export default function LoadingOrdersPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [showQR, setShowQR] = useState(null);
   const [showDetail, setShowDetail] = useState(null);
+  const [showReroute, setShowReroute] = useState(null);
+  const [rerouteForm, setRerouteForm] = useState({ newSpbuId: '', reason: 'Tangki SPBU asal penuh' });
+  const [rerouteLoading, setRerouteLoading] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState({ isOpen: false, target: null, loading: false });
   const [generateConfirm, setGenerateConfirm] = useState({ isOpen: false, targetDate: '', loading: false });
 
@@ -107,6 +110,30 @@ export default function LoadingOrdersPage() {
     }
   };
 
+  const handleOpenReroute = (lo) => {
+    setShowReroute(lo);
+    setRerouteForm({ newSpbuId: '', reason: 'Tangki SPBU asal penuh' });
+  };
+
+  const handleConfirmReroute = async (e) => {
+    e.preventDefault();
+    if (!rerouteForm.newSpbuId) {
+      toast.error('Pilih SPBU tujuan baru');
+      return;
+    }
+    setRerouteLoading(true);
+    try {
+      const res = await api.post(`/lo/${showReroute.id}/reroute`, rerouteForm);
+      toast.success(res.data.message || 'LO berhasil dialihkan');
+      setShowReroute(null);
+      fetchOrders();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Gagal mengalihkan LO');
+    } finally {
+      setRerouteLoading(false);
+    }
+  };
+
   const handleEdit = (lo) => {
     setEditId(lo.id);
     setForm({
@@ -153,7 +180,7 @@ export default function LoadingOrdersPage() {
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Loading Orders</h1>
           <p className="text-sm text-gray-500">Kelola Loading Order dan QR Code</p>
         </div>
-        {user?.role !== 'PENGAWAS' && (
+        {user?.role === 'ADMIN' && (
           <div className="flex gap-2">
             <button onClick={handleGenerateDaily} className="btn-secondary flex items-center gap-2 text-sm">
               <RefreshCw className="w-4 h-4" /> Generate Harian
@@ -266,7 +293,15 @@ export default function LoadingOrdersPage() {
                 <td className="font-semibold text-gray-900 dark:text-white whitespace-nowrap">{lo.noLO}</td>
                 <td>{lo.product}</td>
                 <td>{lo.volume?.toLocaleString()} L</td>
-                <td className="max-w-[150px] truncate">{lo.spbu?.name}</td>
+                <td className="max-w-[170px]">
+                  <div className="font-medium text-gray-900 dark:text-white truncate">{lo.spbu?.name}</div>
+                  {lo.isRerouted && (
+                    <div className="flex items-center gap-1 text-[11px] text-amber-600 dark:text-amber-400 font-semibold mt-0.5" title={`Dialihkan dari: ${lo.originalSpbu?.name || 'SPBU Asal'}. Alasan: ${lo.rerouteReason || '-'}`}>
+                      <ArrowRightLeft className="w-3 h-3 shrink-0" />
+                      <span className="truncate">Dari: {lo.originalSpbu?.name || 'Asal'}</span>
+                    </div>
+                  )}
+                </td>
                 <td>{lo.truck?.nopol}</td>
                 <td className="max-w-[180px]">
                   <div className="text-sm">
@@ -290,13 +325,18 @@ export default function LoadingOrdersPage() {
                 </td>
                 <td>
                   <div className="flex items-center justify-end gap-1">
+                    {(lo.status === 'PENDING' || lo.status === 'IN_TRANSIT') && !lo.feedback && (
+                      <button onClick={() => handleOpenReroute(lo)} className="p-1.5 rounded-lg hover:bg-amber-50 dark:hover:bg-amber-900/30 text-amber-600 dark:text-amber-400" title="Alihkan SPBU Tujuan (Tangki Penuh)">
+                        <ArrowRightLeft className="w-4 h-4" />
+                      </button>
+                    )}
                     <button onClick={() => setShowQR(lo)} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-800 text-gray-500" title="QR Code">
                       <QrCode className="w-4 h-4" />
                     </button>
                     <button onClick={() => setShowDetail(lo)} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-800 text-gray-500" title="Detail">
                       <Eye className="w-4 h-4" />
                     </button>
-                    {user?.role !== 'PENGAWAS' && (
+                    {user?.role === 'ADMIN' && (
                       <>
                         <button onClick={() => handleEdit(lo)} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-800 text-blue-500" title="Edit">
                           <Edit3 className="w-4 h-4" />
@@ -446,6 +486,18 @@ export default function LoadingOrdersPage() {
             <DetailRow label="AMT" value={showDetail.amt?.name ? `${showDetail.amt.name}${showDetail.secondaryAmt?.name ? ` / ${showDetail.secondaryAmt.name}` : ''}` : '-'} />
             <DetailRow label="Tanggal" value={new Date(showDetail.date).toLocaleDateString('id-ID')} />
             <DetailRow label="Status" value={showDetail.status} />
+            {showDetail.isRerouted && (
+              <div className="p-3.5 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/40 rounded-2xl space-y-2 text-xs">
+                <div className="flex items-center gap-1.5 font-bold text-amber-800 dark:text-amber-300">
+                  <ArrowRightLeft className="w-4 h-4" />
+                  <span>PENGALIHAN SPBU TUJUAN</span>
+                </div>
+                <DetailRow label="SPBU Awal" value={showDetail.originalSpbu?.name || '-'} />
+                <DetailRow label="SPBU Tujuan Baru" value={showDetail.spbu?.name || '-'} />
+                <DetailRow label="Alasan" value={showDetail.rerouteReason || '-'} />
+                {showDetail.reroutedAt && <DetailRow label="Waktu Pengalihan" value={new Date(showDetail.reroutedAt).toLocaleString('id-ID')} />}
+              </div>
+            )}
             {showDetail.feedback && (
               <>
                 <hr className="dark:border-slate-700" />
@@ -457,6 +509,64 @@ export default function LoadingOrdersPage() {
               </>
             )}
           </div>
+        </Modal>
+      )}
+
+      {/* Reroute Modal */}
+      {showReroute && (
+        <Modal title={`Alihkan SPBU — ${showReroute.noLO}`} onClose={() => setShowReroute(null)}>
+          <form onSubmit={handleConfirmReroute} className="space-y-4">
+            <div className="p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/40 rounded-xl flex items-start gap-3">
+              <AlertTriangle className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+              <div className="text-xs text-amber-800 dark:text-amber-300">
+                <p className="font-bold">Pengalihan Pembongkaran BBM</p>
+                <p className="mt-0.5">Gunakan opsi ini jika tangki timbun di SPBU asal penuh atau mengalami kendala fisik saat pengantaran.</p>
+              </div>
+            </div>
+
+            <div className="space-y-2 text-sm bg-gray-50 dark:bg-slate-800/60 p-3 rounded-xl border border-gray-100 dark:border-slate-800">
+              <DetailRow label="No. LO" value={showReroute.noLO} />
+              <DetailRow label="Produk / Vol" value={`${showReroute.product} (${showReroute.volume?.toLocaleString()} L)`} />
+              <DetailRow label="SPBU Asal" value={showReroute.spbu?.name} />
+              <DetailRow label="Armada Tangki" value={showReroute.truck?.nopol} />
+            </div>
+
+            <div>
+              <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Pilih SPBU Tujuan Pengalihan Baru</label>
+              <select
+                value={rerouteForm.newSpbuId}
+                onChange={e => setRerouteForm(f => ({ ...f, newSpbuId: e.target.value }))}
+                className="input-field mt-1"
+                required
+              >
+                <option value="">-- Pilih SPBU Pengganti --</option>
+                {spbus.filter(s => s.id !== showReroute.spbuId).map(s => (
+                  <option key={s.id} value={s.id}>{s.name} ({s.code}) - {s.address}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Alasan Pengalihan</label>
+              <select
+                value={rerouteForm.reason}
+                onChange={e => setRerouteForm(f => ({ ...f, reason: e.target.value }))}
+                className="input-field mt-1"
+              >
+                <option value="Tangki SPBU asal penuh">Tangki SPBU asal penuh (Kapasitas tidak mencukupi)</option>
+                <option value="Kendala teknis tangki timbun SPBU">Kendala teknis tangki timbun SPBU asal</option>
+                <option value="Instruksi Sales Branch Manager (SBM)">Instruksi Sales Branch Manager (SBM) / Pengawas</option>
+                <option value="Kebutuhan mendesak SPBU lain">Kebutuhan stok mendesak SPBU tujuan lain</option>
+              </select>
+            </div>
+
+            <div className="flex gap-3 pt-2">
+              <button type="button" onClick={() => setShowReroute(null)} className="btn-secondary flex-1" disabled={rerouteLoading}>Batal</button>
+              <button type="submit" className="btn-primary flex-1 bg-amber-600 hover:bg-amber-700 border-amber-600" disabled={rerouteLoading}>
+                {rerouteLoading ? 'Memproses...' : 'Konfirmasi Alihkan LO'}
+              </button>
+            </div>
+          </form>
         </Modal>
       )}
 

@@ -47,6 +47,9 @@ router.get('/', authenticate, async (req, res) => {
         select: {
           id: true, name: true, email: true, role: true,
           phone: true, isActive: true, lastLogin: true, createdAt: true,
+          spbuId: true, amtId: true,
+          spbu: { select: { id: true, name: true, code: true } },
+          amt: { select: { id: true, name: true, nip: true } },
         },
         orderBy: { createdAt: 'desc' },
         skip,
@@ -140,12 +143,28 @@ router.post('/', authenticate, authorize('ADMIN'), async (req, res) => {
 router.put('/:id', authenticate, authorize('ADMIN'), async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, email, role, phone, isActive, password, spbuId } = req.body;
+    const { name, email, role, phone, isActive, password, spbuId, nip } = req.body;
 
     const data = { name, email, role, phone, isActive };
-    if (role === 'SPBU' && spbuId) {
+
+    if (role === 'SPBU') {
+      if (!spbuId) {
+        return res.status(400).json({ success: false, message: 'SPBU wajib dipilih untuk akun Petugas SPBU' });
+      }
       data.spbuId = parseInt(spbuId);
+      data.amtId = null;
+    } else if (role === 'AMT') {
+      data.spbuId = null;
+      if (nip && nip.trim()) {
+        const amt = await prisma.amt.findUnique({ where: { nip: nip.trim() } });
+        if (amt) data.amtId = amt.id;
+      }
+    } else {
+      // ADMIN or PENGAWAS
+      data.spbuId = null;
+      data.amtId = null;
     }
+
     if (password) {
       data.password = await bcrypt.hash(password, 12);
     }
@@ -153,7 +172,23 @@ router.put('/:id', authenticate, authorize('ADMIN'), async (req, res) => {
     const user = await prisma.user.update({
       where: { id: parseInt(id) },
       data,
-      select: { id: true, name: true, email: true, role: true, phone: true, spbuId: true, isActive: true },
+      select: {
+        id: true, name: true, email: true, role: true, phone: true,
+        spbuId: true, amtId: true, isActive: true,
+        spbu: { select: { id: true, name: true, code: true } },
+        amt: { select: { id: true, name: true, nip: true } }
+      },
+    });
+
+    // Audit log
+    await prisma.auditLog.create({
+      data: {
+        userId: req.user.id,
+        action: 'UPDATE',
+        entity: 'User',
+        entityId: user.id,
+        details: `Updated user: ${user.name} (${user.role}) - active: ${user.isActive}`,
+      },
     });
 
     res.json({ success: true, data: user });

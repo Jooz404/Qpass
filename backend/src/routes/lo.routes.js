@@ -56,6 +56,8 @@ router.get('/', authenticate, authorize('ADMIN', 'PENGAWAS', 'SPBU'), async (req
         where,
         include: {
           spbu: { select: { id: true, name: true, code: true } },
+          originalSpbu: { select: { id: true, name: true, code: true } },
+          reroutedBy: { select: { id: true, name: true, role: true } },
           truck: { select: { id: true, nopol: true } },
           amt: { select: { id: true, name: true } },
           secondaryAmt: { select: { id: true, name: true } },
@@ -186,6 +188,8 @@ router.get('/:id', authenticate, authorize('ADMIN', 'PENGAWAS', 'AMT', 'SPBU'), 
       where: { id: parseInt(req.params.id) },
       include: {
         spbu: true,
+        originalSpbu: true,
+        reroutedBy: true,
         truck: true,
         amt: true,
         secondaryAmt: true,
@@ -349,6 +353,28 @@ router.patch('/:id/status', authenticate, async (req, res) => {
       return res.status(400).json({ success: false, message: 'Status LO tidak valid' });
     }
 
+    // If setting to IN_TRANSIT, auto-complete any previous IN_TRANSIT LO for the same truck/AMT
+    if (status === 'IN_TRANSIT') {
+      const currentLO = await prisma.loadingOrder.findUnique({
+        where: { id: loId },
+        select: { truckId: true, amtId: true },
+      });
+
+      if (currentLO) {
+        await prisma.loadingOrder.updateMany({
+          where: {
+            id: { not: loId },
+            status: 'IN_TRANSIT',
+            OR: [
+              ...(currentLO.truckId ? [{ truckId: currentLO.truckId }] : []),
+              ...(currentLO.amtId ? [{ amtId: currentLO.amtId }] : []),
+            ],
+          },
+          data: { status: 'COMPLETED' },
+        });
+      }
+    }
+
     const updatedLO = await prisma.loadingOrder.update({
       where: { id: loId },
       data: { status },
@@ -414,6 +440,118 @@ router.put('/:id', authenticate, authorize('ADMIN', 'PENGAWAS'), async (req, res
     res.json({ success: true, data: lo });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+// POST /api/lo/:id/reroute - Reroute LO to another SPBU (due to full tank, etc.)
+router.post('/:id/reroute', authenticate, authorize('ADMIN', 'PENGAWAS', 'AMT'), async (req, res) => {
+  try {
+    const loId = parseInt(req.params.id);
+    const { newSpbuId, reason } = req.body;
+
+    if (!newSpbuId) {
+      return res.status(400).json({ success: false, message: 'SPBU tujuan baru wajib dipilih' });
+    }
+
+    const parsedNewSpbuId = parseInt(newSpbuId);
+    const lo = await prisma.loadingOrder.findUnique({
+      where: { id: loId },
+      include: {
+        spbu: true,
+        originalSpbu: true,
+        truck: true,
+        amt: true,
+        feedback: true,
+      },
+    });
+
+    if (!lo) {
+      return res.status(404).json({ success: false, message: 'Loading Order tidak ditemukan' });
+    }
+
+    if (lo.feedback) {
+      return res.status(400).json({ success: false, message: 'Tidak dapat mengalihkan LO yang sudah memiliki feedback / selesai dibongkar' });
+    }
+
+    if (lo.spbuId === parsedNewSpbuId) {
+      return res.status(400).json({ success: false, message: 'SPBU tujuan baru harus berbeda dengan SPBU saat ini' });
+    }
+
+    // Verify new SPBU exists
+    const newSpbu = await prisma.spbu.findUnique({ where: { id: parsedNewSpbuId } });
+    if (!newSpbu) {
+      return res.status(404).json({ success: false, message: 'SPBU tujuan baru tidak ditemukan' });
+    }
+
+    // Store original SPBU id if this is the first reroute
+    const originalSpbuId = lo.originalSpbuId || lo.spbuId;
+    const previousSpbuName = lo.spbu.name;
+
+    // Update LO with new SPBU and reroute metadata
+    const updatedLO = await prisma.loadingOrder.update({
+      where: { id: loId },
+      data: {
+        spbuId: parsedNewSpbuId,
+        originalSpbuId: originalSpbuId,
+        isRerouted: true,
+        rerouteReason: reason || 'Tangki SPBU asal penuh / kendala penerimaan',
+        reroutedAt: new Date(),
+        reroutedById: req.user.id,
+      },
+      include: {
+        spbu: { select: { id: true, name: true, code: true, address: true, lat: true, lng: true } },
+        originalSpbu: { select: { id: true, name: true, code: true } },
+        truck: { select: { id: true, nopol: true } },
+        amt: { select: { id: true, name: true, phone: true } },
+        secondaryAmt: { select: { id: true, name: true } },
+        reroutedBy: { select: { id: true, name: true, role: true } },
+      },
+    });
+
+    // Create Audit Log
+    try {
+      await prisma.auditLog.create({
+        data: {
+          userId: req.user.id,
+          action: 'REROUTE_LO',
+          entity: 'LoadingOrder',
+          entityId: loId,
+          details: `Pengalihan LO ${lo.noLO} dari ${previousSpbuName} ke ${newSpbu.name}. Alasan: ${reason || 'Tangki SPBU Penuh'}`,
+        },
+      });
+    } catch (auditErr) {
+      console.warn('AuditLog creation error:', auditErr.message);
+    }
+
+    // Emit Socket.IO event for real-time update
+    const io = req.app.get('io');
+    if (io) {
+      io.emit('lo-rerouted', {
+        loId: updatedLO.id,
+        noLO: updatedLO.noLO,
+        oldSpbu: { id: lo.spbuId, name: previousSpbuName },
+        newSpbu: { id: newSpbu.id, name: newSpbu.name },
+        reason: updatedLO.rerouteReason,
+        reroutedBy: req.user.name,
+      });
+
+      // Also trigger location active refresh for map
+      io.emit('lo-status-updated', {
+        loId: updatedLO.id,
+        noLO: updatedLO.noLO,
+        status: updatedLO.status,
+        updatedAt: new Date(),
+      });
+    }
+
+    res.json({
+      success: true,
+      message: `Loading Order ${lo.noLO} berhasil dialihkan ke ${newSpbu.name}`,
+      data: updatedLO,
+    });
+  } catch (error) {
+    console.error('Reroute LO error:', error);
+    res.status(500).json({ success: false, message: 'Server error saat mengalihkan LO' });
   }
 });
 

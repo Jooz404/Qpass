@@ -21,7 +21,10 @@ import {
   MapPin,
   Navigation,
   StopCircle,
-  Radio
+  Radio,
+  ArrowRightLeft,
+  AlertTriangle,
+  X
 } from 'lucide-react';
 
 export default function AMTDashboardPage() {
@@ -45,8 +48,16 @@ export default function AMTDashboardPage() {
   const [activeTrackingLoId, setActiveTrackingLoId] = useState(locationService.getActiveLoId());
   const [trackingInfo, setTrackingInfo] = useState(locationService.getLastPosition());
 
+  // Reroute state
+  const [showRerouteModal, setShowRerouteModal] = useState(false);
+  const [selectedLoForReroute, setSelectedLoForReroute] = useState(null);
+  const [spbuList, setSpbuList] = useState([]);
+  const [rerouteForm, setRerouteForm] = useState({ newSpbuId: '', reason: 'Tangki SPBU asal penuh' });
+  const [rerouteLoading, setRerouteLoading] = useState(false);
+
   useEffect(() => {
     fetchDashboardData();
+    api.get('/spbu').then(res => setSpbuList(res.data.data || [])).catch(() => {});
 
     // Subscribe to real-time location tracking updates
     const unsubscribe = locationService.subscribe((data) => {
@@ -159,6 +170,32 @@ export default function AMTDashboardPage() {
     } catch (err) {
       console.error('Error stopping tracking:', err);
       toast.error('Gagal menghentikan pelacakan lokasi');
+    }
+  };
+
+  const handleOpenReroute = (lo, e) => {
+    if (e) e.stopPropagation();
+    setSelectedLoForReroute(lo);
+    setRerouteForm({ newSpbuId: '', reason: 'Tangki SPBU asal penuh' });
+    setShowRerouteModal(true);
+  };
+
+  const handleConfirmReroute = async (e) => {
+    e.preventDefault();
+    if (!rerouteForm.newSpbuId) {
+      toast.error('Pilih SPBU tujuan baru');
+      return;
+    }
+    setRerouteLoading(true);
+    try {
+      const res = await api.post(`/lo/${selectedLoForReroute.id}/reroute`, rerouteForm);
+      toast.success(res.data.message || 'Pengalihan LO berhasil diajukan');
+      setShowRerouteModal(false);
+      fetchDashboardData();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Gagal mengalihkan LO');
+    } finally {
+      setRerouteLoading(false);
     }
   };
 
@@ -549,6 +586,12 @@ export default function AMTDashboardPage() {
                           <p className="text-sm text-slate-600 dark:text-slate-400">
                             {lo.spbu?.name} - {lo.product}
                           </p>
+                          {lo.isRerouted && (
+                            <div className="flex items-center gap-1.5 text-xs text-amber-600 dark:text-amber-400 font-semibold mt-1">
+                              <ArrowRightLeft className="w-3.5 h-3.5" />
+                              <span>Dialihkan dari: {lo.originalSpbu?.name || 'SPBU Asal'}</span>
+                            </div>
+                          )}
                         </div>
                       </div>
                       <div className="flex items-center gap-3">
@@ -600,7 +643,7 @@ export default function AMTDashboardPage() {
                             {(!isTracking || activeTrackingLoId !== lo.id) && (
                               <button
                                 onClick={() => handleStartTrackingClick(lo)}
-                                className="w-full py-3 bg-gradient-to-r from-red-600 via-rose-600 to-pertamina-blue text-white font-bold rounded-xl shadow-lg shadow-red-500/20 hover:shadow-red-500/30 transition-all duration-300 hover:scale-[1.02] flex items-center justify-center gap-2"
+                                className="flex-1 py-3 bg-gradient-to-r from-red-600 via-rose-600 to-pertamina-blue text-white font-bold rounded-xl shadow-lg shadow-red-500/20 hover:shadow-red-500/30 transition-all duration-300 hover:scale-[1.02] flex items-center justify-center gap-2"
                               >
                                 <Navigation className="w-4 h-4" />
                                 Mulai Pengiriman & Aktifkan Pelacakan Lokasi
@@ -610,12 +653,20 @@ export default function AMTDashboardPage() {
                             {isTracking && activeTrackingLoId === lo.id && (
                               <button
                                 onClick={() => handleStopTracking(lo.id)}
-                                className="w-full py-3 bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-bold rounded-xl shadow-lg shadow-emerald-500/20 hover:shadow-emerald-500/30 transition-all duration-300 hover:scale-[1.02] flex items-center justify-center gap-2"
+                                className="flex-1 py-3 bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-bold rounded-xl shadow-lg shadow-emerald-500/20 hover:shadow-emerald-500/30 transition-all duration-300 hover:scale-[1.02] flex items-center justify-center gap-2"
                               >
                                 <StopCircle className="w-4 h-4" />
                                 Selesai Pengiriman / Tiba di SPBU
                               </button>
                             )}
+
+                            <button
+                              onClick={(e) => handleOpenReroute(lo, e)}
+                              className="px-4 py-3 bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs sm:text-sm rounded-xl shadow-md shadow-amber-500/20 transition-all flex items-center justify-center gap-2 shrink-0"
+                            >
+                              <ArrowRightLeft className="w-4 h-4" />
+                              Pengalihan SPBU (Tangki Penuh)
+                            </button>
                           </div>
                         )}
 
@@ -637,6 +688,79 @@ export default function AMTDashboardPage() {
           </div>
         </div>
       </div>
+
+      {/* Reroute Modal for AMT */}
+      {showRerouteModal && selectedLoForReroute && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in" onClick={() => setShowRerouteModal(false)}>
+          <div className="w-full max-w-lg bg-white dark:bg-slate-900 rounded-3xl p-6 shadow-2xl border border-slate-200 dark:border-slate-800 animate-scale-in" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between pb-4 border-b border-slate-100 dark:border-slate-800">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2.5 bg-amber-100 dark:bg-amber-900/30 rounded-xl text-amber-600 dark:text-amber-400">
+                  <ArrowRightLeft className="w-5 h-5" />
+                </div>
+                <h3 className="font-bold text-lg text-slate-900 dark:text-white">Pengalihan SPBU Tujuan</h3>
+              </div>
+              <button onClick={() => setShowRerouteModal(false)} className="p-2 rounded-xl text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleConfirmReroute} className="space-y-4 pt-4">
+              <div className="p-3.5 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/40 rounded-2xl flex items-start gap-3">
+                <AlertTriangle className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                <div className="text-xs text-amber-900 dark:text-amber-200">
+                  <p className="font-bold">Tangki SPBU Penuh / Kendala Bongkar</p>
+                  <p className="mt-0.5">Sistem akan memperbarui tujuan SPBU baru dan meneruskan informasi ke Pengawas & Admin Q-Pass.</p>
+                </div>
+              </div>
+
+              <div className="p-3 bg-slate-50 dark:bg-slate-800 rounded-xl text-xs space-y-1 text-slate-600 dark:text-slate-400">
+                <div className="flex justify-between"><span>No. LO:</span> <span className="font-bold text-slate-900 dark:text-white">{selectedLoForReroute.noLO}</span></div>
+                <div className="flex justify-between"><span>SPBU Asal:</span> <span className="font-bold text-slate-900 dark:text-white">{selectedLoForReroute.spbu?.name}</span></div>
+                <div className="flex justify-between"><span>Produk / Volume:</span> <span className="font-bold text-slate-900 dark:text-white">{selectedLoForReroute.product} ({selectedLoForReroute.volume?.toLocaleString()} L)</span></div>
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">Pilih SPBU Pengganti / Tujuan Baru</label>
+                <select
+                  value={rerouteForm.newSpbuId}
+                  onChange={e => setRerouteForm(f => ({ ...f, newSpbuId: e.target.value }))}
+                  className="w-full px-3.5 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm"
+                  required
+                >
+                  <option value="">-- Pilih SPBU Baru --</option>
+                  {spbuList.filter(s => s.id !== selectedLoForReroute.spbuId).map(s => (
+                    <option key={s.id} value={s.id}>{s.name} ({s.code}) - {s.address}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">Alasan Pengalihan</label>
+                <select
+                  value={rerouteForm.reason}
+                  onChange={e => setRerouteForm(f => ({ ...f, reason: e.target.value }))}
+                  className="w-full px-3.5 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm"
+                >
+                  <option value="Tangki SPBU asal penuh">Tangki SPBU asal penuh (Kapasitas tidak mencukupi)</option>
+                  <option value="Kendala teknis tangki timbun SPBU">Kendala teknis tangki timbun SPBU asal</option>
+                  <option value="Instruksi Sales Branch Manager (SBM)">Instruksi Sales Branch Manager (SBM) / Pengawas</option>
+                  <option value="Kebutuhan mendesak SPBU lain">Kebutuhan stok mendesak SPBU lain</option>
+                </select>
+              </div>
+
+              <div className="flex gap-3 pt-2">
+                <button type="button" onClick={() => setShowRerouteModal(false)} className="flex-1 py-3 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold rounded-xl text-sm" disabled={rerouteLoading}>
+                  Batal
+                </button>
+                <button type="submit" className="flex-1 py-3 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl text-sm shadow-md shadow-amber-500/20" disabled={rerouteLoading}>
+                  {rerouteLoading ? 'Memproses...' : 'Ajukan Pengalihan'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* Permission Modal */}
       <AMTTrackingPermissionModal
