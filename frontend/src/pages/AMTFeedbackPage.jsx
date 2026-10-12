@@ -235,7 +235,7 @@ export default function AMTFeedbackPage() {
     
     try {
       await api.post('/amt-feedback', {
-        loId,
+        loId: lo?.id || loId,
         spbuId: lo.spbuId,
         ratingKeramahan,
         ratingKooperasi,

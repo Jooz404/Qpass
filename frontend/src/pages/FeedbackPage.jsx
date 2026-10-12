@@ -6,7 +6,7 @@ import api from '../services/api';
 import {
   Fuel, ShieldCheck, Droplets, Eye, Gauge, Star, Camera,
   MessageSquare, Send, CheckCircle, AlertTriangle, Loader2, XCircle,
-  ArrowLeft
+  ArrowLeft, Home, QrCode, LayoutDashboard, Clock, Pause, Play, CheckCircle2, ArrowRight
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
@@ -24,6 +24,31 @@ export default function FeedbackPage() {
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [isLoNumber, setIsLoNumber] = useState(false);
+  const [countdown, setCountdown] = useState(5);
+  const [isPaused, setIsPaused] = useState(false);
+
+  const getDestinationPath = () => {
+    if (user?.role === 'SPBU') return '/spbu-dashboard';
+    if (user?.role === 'AMT') return '/amt-dashboard';
+    if (user?.role === 'ADMIN' || user?.role === 'PENGAWAS') return '/monitoring';
+    return '/';
+  };
+
+  useEffect(() => {
+    if (!submitted) return;
+    if (isPaused) return;
+
+    if (countdown <= 0) {
+      navigate(getDestinationPath());
+      return;
+    }
+
+    const timer = setInterval(() => {
+      setCountdown((prev) => prev - 1);
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [submitted, countdown, isPaused, user, navigate]);
 
   // Redirect AMT to AMTFeedbackPage if accessing via QR/LO number
   // NOTE: This redirect is now handled in ScanQRPage.jsx directly
@@ -451,15 +476,95 @@ export default function FeedbackPage() {
 
   // Success state
   if (submitted) {
+    const destPath = getDestinationPath();
+    const destLabel = user?.role === 'SPBU' ? 'Dashboard SPBU' : user?.role === 'AMT' ? 'Dashboard AMT' : 'Halaman Utama';
+
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-emerald-50 to-green-100 dark:from-slate-950 dark:to-slate-900 p-4">
-        <div className="text-center max-w-sm animate-scale-in">
-          <div className="w-20 h-20 mx-auto bg-emerald-100 dark:bg-emerald-900/30 rounded-full flex items-center justify-center mb-4">
-            <CheckCircle className="w-10 h-10 text-emerald-500" />
+      <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 flex items-center justify-center p-4">
+        <div className="max-w-md w-full bg-slate-900/90 border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-2xl backdrop-blur-xl animate-scale-in text-center">
+          {/* Animated Success Badge */}
+          <div className="relative mx-auto w-24 h-24 mb-6">
+            <div className="absolute inset-0 rounded-full bg-emerald-500/20 animate-ping opacity-75" />
+            <div className="relative w-24 h-24 bg-gradient-to-tr from-emerald-600 to-teal-400 rounded-full flex items-center justify-center shadow-lg shadow-emerald-500/30">
+              <CheckCircle2 className="w-12 h-12 text-white stroke-[2.5]" />
+            </div>
           </div>
-          <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-2">Feedback Terkirim!</h2>
-          <p className="text-sm text-gray-500 mb-1">Terima kasih atas feedback Anda.</p>
-          <p className="text-xs text-gray-400">LO: {lo.noLO}</p>
+
+          <h2 className="text-2xl font-black text-white tracking-tight mb-2">
+            Feedback Terkirim!
+          </h2>
+          <p className="text-sm text-slate-300 mb-6 leading-relaxed">
+            Terima kasih atas penilaian Anda. Feedback berhasil dicatat dalam sistem Q-PASS Pertamina.
+          </p>
+
+          {/* Summary Card */}
+          <div className="bg-slate-800/80 rounded-2xl p-4 mb-6 border border-slate-700/60 text-left space-y-3">
+            <div className="flex items-center justify-between text-xs pb-2 border-b border-slate-700/50">
+              <span className="text-slate-400 font-medium">Nomor LO</span>
+              <span className="text-white font-mono font-bold">{lo?.noLO || '-'}</span>
+            </div>
+            <div className="flex items-center justify-between text-xs pb-2 border-b border-slate-700/50">
+              <span className="text-slate-400 font-medium">Produk</span>
+              <span className="text-white font-semibold">{lo?.product || '-'}</span>
+            </div>
+            {lo?.spbu?.name && (
+              <div className="flex items-center justify-between text-xs pb-2 border-b border-slate-700/50">
+                <span className="text-slate-400 font-medium">SPBU</span>
+                <span className="text-emerald-400 font-semibold">{lo.spbu.name}</span>
+              </div>
+            )}
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-slate-400 font-medium">Status</span>
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                Tersimpan & Terverifikasi
+              </span>
+            </div>
+          </div>
+
+          {/* Auto Redirect Countdown Box */}
+          <div className="bg-slate-950/60 rounded-2xl p-3.5 mb-6 border border-slate-800 flex items-center justify-between">
+            <div className="flex items-center gap-2.5 text-xs text-slate-300 text-left">
+              <Clock className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+              <span>
+                {isPaused ? (
+                  <span className="text-amber-300 font-medium">Pengalihan otomatis dijeda</span>
+                ) : (
+                  <>Otomatis dialihkan dalam <strong className="text-white text-sm font-bold font-mono">{countdown}</strong> detik...</>
+                )}
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setIsPaused(!isPaused)}
+              className="text-[11px] font-semibold text-slate-400 hover:text-white px-2 py-1 rounded-lg bg-slate-800/80 hover:bg-slate-700 transition-colors flex items-center gap-1"
+            >
+              {isPaused ? <Play className="w-3 h-3 text-emerald-400" /> : <Pause className="w-3 h-3 text-amber-400" />}
+              <span>{isPaused ? 'Lanjut' : 'Jeda'}</span>
+            </button>
+          </div>
+
+          {/* Action Buttons */}
+          <div className="space-y-3">
+            <button
+              type="button"
+              onClick={() => navigate(destPath)}
+              className="w-full py-3.5 px-5 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-bold rounded-2xl shadow-lg shadow-emerald-500/25 flex items-center justify-center gap-2 transition-all active:scale-[0.98] text-sm"
+            >
+              <LayoutDashboard className="w-4 h-4" />
+              <span>Ke {destLabel} Sekarang</span>
+              <ArrowRight className="w-4 h-4" />
+            </button>
+
+            <button
+              type="button"
+              onClick={() => navigate('/scan-qr')}
+              className="w-full py-3 px-5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold rounded-2xl border border-slate-700 flex items-center justify-center gap-2 transition-all text-xs"
+            >
+              <QrCode className="w-4 h-4 text-pertamina-red" />
+              <span>Scan Loading Order Lain</span>
+            </button>
+          </div>
         </div>
       </div>
     );

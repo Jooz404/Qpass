@@ -32,26 +32,45 @@ router.post('/', authenticate, authorize('AMT'), async (req, res) => {
       }
     }
 
-    // Check if LO exists and belongs to this AMT
-    const lo = await prisma.loadingOrder.findUnique({
-      where: { id: parseInt(loId) },
-      include: {
-        amt: true,
-        spbu: true
-      }
-    });
+    // Check if LO exists (support numeric ID, LO number, or qrToken)
+    let lo;
+    if (typeof loId === 'number' || /^\d+$/.test(String(loId))) {
+      lo = await prisma.loadingOrder.findUnique({
+        where: { id: parseInt(loId) },
+        include: {
+          amt: true,
+          secondaryAmt: true,
+          spbu: true
+        }
+      });
+    } else {
+      lo = await prisma.loadingOrder.findFirst({
+        where: {
+          OR: [
+            { noLO: String(loId) },
+            { qrToken: String(loId) }
+          ]
+        },
+        include: {
+          amt: true,
+          secondaryAmt: true,
+          spbu: true
+        }
+      });
+    }
 
     if (!lo) {
       return res.status(404).json({ success: false, message: 'Loading Order tidak ditemukan' });
     }
 
-    // Verify AMT is assigned to this LO
-    if (lo.amtId !== req.user.amtId) {
+    // Verify AMT is assigned to this LO (support primary or secondary AMT)
+    if (lo.amtId !== req.user.amtId && lo.secondaryAmtId !== req.user.amtId) {
       return res.status(403).json({ success: false, message: 'Anda tidak memiliki akses ke Loading Order ini' });
     }
 
     // Verify SPBU matches the LO's SPBU
-    if (lo.spbuId !== parseInt(spbuId)) {
+    const targetSpbuId = parseInt(spbuId) || lo.spbuId;
+    if (lo.spbuId !== targetSpbuId) {
       return res.status(400).json({ success: false, message: 'SPBU ID tidak sesuai dengan Loading Order' });
     }
 
@@ -59,7 +78,7 @@ router.post('/', authenticate, authorize('AMT'), async (req, res) => {
     const existingFeedback = await prisma.aMTFeedback.findUnique({
       where: {
         loId_amtId: {
-          loId: parseInt(loId),
+          loId: lo.id,
           amtId: req.user.amtId
         }
       }
@@ -73,8 +92,8 @@ router.post('/', authenticate, authorize('AMT'), async (req, res) => {
     const feedback = await prisma.aMTFeedback.create({
       data: {
         amtId: req.user.amtId,
-        spbuId: parseInt(spbuId),
-        loId: parseInt(loId),
+        spbuId: lo.spbuId,
+        loId: lo.id,
         ratingKeramahan,
         ratingKooperasi,
         ratingFasilitas,
@@ -94,12 +113,12 @@ router.post('/', authenticate, authorize('AMT'), async (req, res) => {
 
     // Update LO status to COMPLETED if both SPBU and AMT feedback exist
     const spbuFeedback = await prisma.feedback.findUnique({
-      where: { loId: parseInt(loId) }
+      where: { loId: lo.id }
     });
 
     if (spbuFeedback) {
       await prisma.loadingOrder.update({
-        where: { id: parseInt(loId) },
+        where: { id: lo.id },
         data: { status: 'COMPLETED' }
       });
     }
@@ -108,8 +127,8 @@ router.post('/', authenticate, authorize('AMT'), async (req, res) => {
     const io = req.app.get('io');
     if (io) {
       const [spbuFeedbacks, amtFeedbacks] = await Promise.all([
-        prisma.feedback.findMany({ where: { spbuId: parseInt(spbuId) }, select: { rating: true } }),
-        prisma.aMTFeedback.findMany({ where: { spbuId: parseInt(spbuId) }, select: { ratingKeseluruhan: true } })
+        prisma.feedback.findMany({ where: { spbuId: lo.spbuId }, select: { rating: true } }),
+        prisma.aMTFeedback.findMany({ where: { spbuId: lo.spbuId }, select: { ratingKeseluruhan: true } })
       ]);
       const allRatings = [
         ...spbuFeedbacks.map(f => f.rating),
@@ -118,7 +137,7 @@ router.post('/', authenticate, authorize('AMT'), async (req, res) => {
       const avgRating = allRatings.length > 0 ? (allRatings.reduce((a, b) => a + b, 0) / allRatings.length) : 0;
 
       io.to('dashboard').emit('spbu-rating-updated', {
-        spbuId: parseInt(spbuId),
+        spbuId: lo.spbuId,
         averageRating: avgRating
       });
     }
@@ -135,8 +154,28 @@ router.get('/lo/:loId', authenticate, authorize('AMT', 'ADMIN', 'PENGAWAS'), asy
   try {
     const { loId } = req.params;
 
+    let targetLoId = null;
+    if (/^\d+$/.test(String(loId))) {
+      targetLoId = parseInt(loId);
+    } else {
+      const found = await prisma.loadingOrder.findFirst({
+        where: {
+          OR: [
+            { noLO: String(loId) },
+            { qrToken: String(loId) }
+          ]
+        },
+        select: { id: true }
+      });
+      if (found) targetLoId = found.id;
+    }
+
+    if (!targetLoId) {
+      return res.json({ success: true, data: [] });
+    }
+
     const feedbacks = await prisma.aMTFeedback.findMany({
-      where: { loId: parseInt(loId) },
+      where: { loId: targetLoId },
       include: {
         amt: { select: { id: true, name: true } },
         spbu: { select: { id: true, name: true, code: true } }
