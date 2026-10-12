@@ -253,7 +253,7 @@ export default function AMTDashboardPage() {
               </h1>
             </div>
             <p className="text-slate-600 dark:text-slate-400 ml-14">
-              Selamat datang kembali, <span className="font-semibold text-slate-700 dark:text-slate-300">{user?.name}</span> 👋
+              <span className="font-semibold text-slate-700 dark:text-slate-300">{user?.name}</span>
             </p>
           </div>
         </div>
