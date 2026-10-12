@@ -238,12 +238,22 @@ router.delete('/:id', authenticate, authorize('ADMIN'), async (req, res) => {
       return res.status(400).json({ success: false, message: 'Tidak dapat menghapus akun sendiri' });
     }
     
-    // Hard delete the user
-    await prisma.user.delete({
-      where: { id: parseInt(id) },
-    });
-    
-    res.json({ success: true, message: 'User berhasil dihapus' });
+    // Try hard delete, fallback to soft delete if user has foreign key relations
+    try {
+      await prisma.user.delete({
+        where: { id: parseInt(id) },
+      });
+      res.json({ success: true, message: 'User berhasil dihapus' });
+    } catch (err) {
+      if (err.code === 'P2003') {
+        await prisma.user.update({
+          where: { id: parseInt(id) },
+          data: { isActive: false },
+        });
+        return res.json({ success: true, message: 'User dinonaktifkan karena memiliki riwayat operasional atau audit' });
+      }
+      throw err;
+    }
   } catch (error) {
     console.error('Delete user error:', error);
     res.status(500).json({ success: false, message: 'Server error' });

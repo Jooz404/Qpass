@@ -173,7 +173,14 @@ router.delete('/:id', authenticate, authorize('ADMIN'), async (req, res) => {
       const loList = await prisma.loadingOrder.findMany({ where: { spbuId }, select: { id: true } });
       const loIds = loList.map(l => l.id);
       if (loIds.length > 0) {
+        const feedbacks = await prisma.feedback.findMany({ where: { loId: { in: loIds } }, select: { id: true } });
+        const fbIds = feedbacks.map(f => f.id);
+        if (fbIds.length > 0) {
+          await prisma.complaint.deleteMany({ where: { feedbackId: { in: fbIds } } });
+        }
         await prisma.feedback.deleteMany({ where: { loId: { in: loIds } } });
+        await prisma.amtLocationLog.deleteMany({ where: { loId: { in: loIds } } });
+        await prisma.qualityControl.deleteMany({ where: { loId: { in: loIds } } });
         await prisma.loadingOrder.deleteMany({ where: { spbuId } });
       }
       await prisma.spbu.delete({ where: { id: spbuId } });
