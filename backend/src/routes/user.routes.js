@@ -49,7 +49,6 @@ router.get('/', authenticate, async (req, res) => {
           phone: true, isActive: true, lastLogin: true, createdAt: true,
           spbuId: true, amtId: true,
           spbu: { select: { id: true, name: true, code: true } },
-          amt: { select: { id: true, name: true, nip: true } },
         },
         orderBy: { createdAt: 'desc' },
         skip,
@@ -58,9 +57,25 @@ router.get('/', authenticate, async (req, res) => {
       prisma.user.count({ where }),
     ]);
 
+    // Attach AMT details if amtId exists
+    const amtIds = users.filter(u => u.amtId).map(u => u.amtId);
+    let amtMap = {};
+    if (amtIds.length > 0) {
+      const amts = await prisma.amt.findMany({
+        where: { id: { in: amtIds } },
+        select: { id: true, name: true, nip: true },
+      });
+      amtMap = Object.fromEntries(amts.map(a => [a.id, a]));
+    }
+
+    const enrichedUsers = users.map(u => ({
+      ...u,
+      amt: u.amtId ? (amtMap[u.amtId] || null) : null,
+    }));
+
     res.json({
       success: true,
-      data: users,
+      data: enrichedUsers,
       pagination: {
         page: parseInt(page),
         limit: parseInt(limit),
@@ -176,9 +191,18 @@ router.put('/:id', authenticate, authorize('ADMIN'), async (req, res) => {
         id: true, name: true, email: true, role: true, phone: true,
         spbuId: true, amtId: true, isActive: true,
         spbu: { select: { id: true, name: true, code: true } },
-        amt: { select: { id: true, name: true, nip: true } }
       },
     });
+
+    let amtData = null;
+    if (user.amtId) {
+      amtData = await prisma.amt.findUnique({
+        where: { id: user.amtId },
+        select: { id: true, name: true, nip: true },
+      });
+    }
+
+    const enrichedUser = { ...user, amt: amtData };
 
     // Audit log
     await prisma.auditLog.create({
@@ -191,7 +215,7 @@ router.put('/:id', authenticate, authorize('ADMIN'), async (req, res) => {
       },
     });
 
-    res.json({ success: true, data: user });
+    res.json({ success: true, data: enrichedUser });
   } catch (error) {
     console.error('Update user error:', error);
     res.status(500).json({ success: false, message: 'Server error' });
