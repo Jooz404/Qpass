@@ -82,7 +82,7 @@ export default function AMTFeedbackPage() {
       } else {
         // It's an LO number or token, need to fetch by number/token first
         const isLo = loId?.toUpperCase().startsWith('LO-');
-        const apiUrl = isLo ? `/lo/by-no/${loId}` : `/lo/by-token/${loId}`;
+        const apiUrl = isLo ? `/lo/by-no/${loId}?role=AMT` : `/lo/by-token/${loId}?role=AMT`;
         res = await api.get(apiUrl);
       }
       

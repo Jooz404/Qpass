@@ -108,10 +108,12 @@ router.get('/by-token/:token', async (req, res) => {
       return res.status(403).json({ success: false, message: 'Loading Order ini bukan untuk SPBU Anda' });
     }
 
-    // AMT can scan any LO (no AMT filter for AMT role)
+    // Check if this is an AMT request
+    const isAmtRequest = req.query.role === 'AMT' || req.query.forRole === 'AMT' || Boolean(amtId);
 
-    if (lo.feedback) {
-      return res.status(400).json({ success: false, message: 'Feedback untuk LO ini sudah dikirim', feedbackExists: true });
+    // Only block if SPBU feedback exists AND the requester is NOT AMT
+    if (lo.feedback && !isAmtRequest) {
+      return res.status(400).json({ success: false, message: 'Feedback SPBU untuk LO ini sudah dikirim', feedbackExists: true });
     }
 
     console.log('LO found:', lo.noLO, 'SPBU:', lo.spbu.name);
@@ -167,10 +169,12 @@ router.get('/by-no/:noLO', async (req, res) => {
       return res.status(404).json({ success: false, message: 'Loading Order tidak ditemukan untuk SPBU ini' });
     }
 
-    // AMT can scan any LO (no AMT filter for AMT role)
+    // Check if this is an AMT request
+    const isAmtRequest = req.query.role === 'AMT' || req.query.forRole === 'AMT' || Boolean(amtId);
 
-    if (lo.feedback) {
-      return res.status(400).json({ success: false, message: 'Feedback untuk LO ini sudah dikirim', feedbackExists: true });
+    // Only block if SPBU feedback exists AND the requester is NOT AMT
+    if (lo.feedback && !isAmtRequest) {
+      return res.status(400).json({ success: false, message: 'Feedback SPBU untuk LO ini sudah dikirim', feedbackExists: true });
     }
 
     console.log('LO found:', lo.noLO, 'SPBU:', lo.spbu.name);
@@ -564,22 +568,54 @@ router.post('/:id/reroute', authenticate, authorize('ADMIN', 'PENGAWAS', 'AMT'),
   }
 });
 
-// DELETE /api/lo/:id
+// DELETE /api/lo/:id - Cascade delete LO and all related records
 router.delete('/:id', authenticate, authorize('ADMIN'), async (req, res) => {
   try {
-    // Check if feedback exists
+    const id = parseInt(req.params.id);
     const lo = await prisma.loadingOrder.findUnique({
-      where: { id: parseInt(req.params.id) },
-      include: { feedback: true },
+      where: { id },
+      include: {
+        feedback: { include: { complaint: true } },
+        amtFeedbacks: true,
+        locationLogs: true,
+        qualityControls: true,
+      },
     });
-    if (lo?.feedback) {
-      return res.status(400).json({ success: false, message: 'Tidak dapat menghapus LO yang sudah memiliki feedback' });
+
+    if (!lo) {
+      return res.status(404).json({ success: false, message: 'Loading Order tidak ditemukan' });
     }
 
-    await prisma.loadingOrder.delete({ where: { id: parseInt(req.params.id) } });
-    res.json({ success: true, message: 'Loading Order berhasil dihapus' });
+    // Cascade delete in a transaction
+    await prisma.$transaction(async (tx) => {
+      // 1. Delete complaint if feedback has one
+      if (lo.feedback?.complaint) {
+        await tx.complaint.delete({ where: { id: lo.feedback.complaint.id } });
+      }
+      // 2. Delete SPBU feedback
+      if (lo.feedback) {
+        await tx.feedback.delete({ where: { id: lo.feedback.id } });
+      }
+      // 3. Delete AMT feedbacks
+      if (lo.amtFeedbacks?.length > 0) {
+        await tx.aMTFeedback.deleteMany({ where: { loId: id } });
+      }
+      // 4. Delete location logs
+      if (lo.locationLogs?.length > 0) {
+        await tx.amtLocationLog.deleteMany({ where: { loId: id } });
+      }
+      // 5. Delete quality controls
+      if (lo.qualityControls?.length > 0) {
+        await tx.qualityControl.deleteMany({ where: { loId: id } });
+      }
+      // 6. Delete the Loading Order itself
+      await tx.loadingOrder.delete({ where: { id } });
+    });
+
+    res.json({ success: true, message: 'Loading Order beserta data terkait berhasil dihapus' });
   } catch (error) {
-    res.status(500).json({ success: false, message: 'Server error' });
+    console.error('Delete LO error:', error);
+    res.status(500).json({ success: false, message: error.message || 'Server error saat menghapus Loading Order' });
   }
 });
 
