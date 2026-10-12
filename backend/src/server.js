@@ -144,8 +144,8 @@ io.on('connection', (socket) => {
   });
 });
 
-// Start server - fixed port 5002
-const PORT = 5002;
+// Start server - default port 5000
+const PORT = process.env.PORT || 5000;
 
 server.listen(PORT, () => {
   console.log(`\n🚀 ======================================`);
