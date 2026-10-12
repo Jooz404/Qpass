@@ -40,6 +40,9 @@ app.use(helmet({
   crossOriginEmbedderPolicy: false,
 }));
 
+// Enable trust proxy behind Nginx reverse proxy
+app.set('trust proxy', 1);
+
 // Rate limiting - generous limits for smooth operational testing
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
