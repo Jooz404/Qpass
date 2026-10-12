@@ -9,6 +9,14 @@ import {
 } from 'lucide-react';
 import ConfirmModal from '../components/ConfirmModal';
 
+const getFeedbackBadge = (feedback) => {
+  if (!feedback) return { text: 'Belum Ada', className: 'text-gray-400' };
+  if (feedback.status === 'HIGH_PRIORITY') {
+    return { text: '⚠ KRITIS', className: 'text-red-500 font-bold' };
+  }
+  return { text: 'Normal', className: 'text-emerald-500 font-medium' };
+};
+
 export default function LoadingOrdersPage() {
   const toast = useToast();
   const { user } = useAuth();
@@ -107,6 +115,18 @@ export default function LoadingOrdersPage() {
     } catch (err) {
       toast.error(err.response?.data?.message || 'Gagal menghapus');
       setDeleteConfirm(prev => ({ ...prev, loading: false }));
+    }
+  };
+
+  const handleOpenDetail = async (lo) => {
+    setShowDetail(lo);
+    try {
+      const res = await api.get(`/lo/${lo.id}`);
+      if (res.data?.data) {
+        setShowDetail(res.data.data);
+      }
+    } catch (err) {
+      console.error('Failed to load full LO detail:', err);
     }
   };
 
@@ -333,7 +353,7 @@ export default function LoadingOrdersPage() {
                     <button onClick={() => setShowQR(lo)} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-800 text-gray-500" title="QR Code">
                       <QrCode className="w-4 h-4" />
                     </button>
-                    <button onClick={() => setShowDetail(lo)} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-800 text-gray-500" title="Detail">
+                    <button onClick={() => handleOpenDetail(lo)} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-800 text-gray-500" title="Detail">
                       <Eye className="w-4 h-4" />
                     </button>
                     {user?.role === 'ADMIN' && (
@@ -501,11 +521,53 @@ export default function LoadingOrdersPage() {
             {showDetail.feedback && (
               <>
                 <hr className="dark:border-slate-700" />
-                <h4 className="font-bold text-gray-900 dark:text-white">Feedback</h4>
-                <DetailRow label="Segel" value={showDetail.feedback.sealCondition} />
-                <DetailRow label="Volume" value={showDetail.feedback.volumeStatus} />
-                <DetailRow label="Rating" value={`⭐ ${showDetail.feedback.rating}/5`} />
-                <DetailRow label="Status" value={getFeedbackBadge(showDetail.feedback).text} />
+                <h4 className="font-bold text-gray-900 dark:text-white">Feedback SPBU</h4>
+                <DetailRow label="Segel" value={showDetail.feedback.sealCondition || '-'} />
+                <DetailRow label="Volume" value={showDetail.feedback.volumeStatus || '-'} />
+                {showDetail.feedback.density !== undefined && showDetail.feedback.density !== null && (
+                  <DetailRow label="Densitas" value={`${showDetail.feedback.density} kg/m³`} />
+                )}
+                <DetailRow label="Rating SPBU" value={`⭐ ${showDetail.feedback.rating}/5`} />
+                <DetailRow
+                  label="Status Feedback"
+                  value={
+                    <span className={getFeedbackBadge(showDetail.feedback).className}>
+                      {getFeedbackBadge(showDetail.feedback).text}
+                    </span>
+                  }
+                />
+                {showDetail.feedback.notes && (
+                  <div className="text-xs text-gray-500 mt-1">
+                    Catatan: <span className="text-gray-700 dark:text-gray-300">{showDetail.feedback.notes}</span>
+                  </div>
+                )}
+                {showDetail.feedback.complaint && (
+                  <div className="p-2.5 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800/40 rounded-xl text-xs text-red-700 dark:text-red-300">
+                    <span className="font-bold">Keluhan: </span>{showDetail.feedback.complaint.description || '-'}
+                  </div>
+                )}
+              </>
+            )}
+
+            {showDetail.amtFeedbacks && showDetail.amtFeedbacks.length > 0 && (
+              <>
+                <hr className="dark:border-slate-700" />
+                <h4 className="font-bold text-gray-900 dark:text-white">Feedback AMT</h4>
+                {showDetail.amtFeedbacks.map((afb, idx) => (
+                  <div key={afb.id || idx} className="space-y-1.5 bg-gray-50 dark:bg-slate-800/50 p-3 rounded-xl border border-gray-100 dark:border-slate-800 text-xs">
+                    <div className="font-semibold text-gray-800 dark:text-gray-200">
+                      {afb.amt?.name || 'Driver AMT'}
+                    </div>
+                    {afb.ratingKeseluruhan && (
+                      <DetailRow label="Rating Total" value={`⭐ ${afb.ratingKeseluruhan}/5`} />
+                    )}
+                    {afb.notes && (
+                      <div className="text-gray-500 mt-1">
+                        Catatan: <span className="text-gray-700 dark:text-gray-300">{afb.notes}</span>
+                      </div>
+                    )}
+                  </div>
+                ))}
               </>
             )}
           </div>

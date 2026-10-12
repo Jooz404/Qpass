@@ -198,6 +198,7 @@ router.get('/:id', authenticate, authorize('ADMIN', 'PENGAWAS', 'AMT', 'SPBU'), 
         amt: true,
         secondaryAmt: true,
         feedback: { include: { complaint: true } },
+        amtFeedbacks: { include: { amt: true } },
       },
     });
     if (!lo) return res.status(404).json({ success: false, message: 'LO tidak ditemukan' });
