@@ -47,6 +47,7 @@ const spbuLinks = [
 
 const amtLinks = [
   { path: '/amt-dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { path: '/scan-qr', label: 'Scan QR Code', icon: QrCode },
   { path: '/feedback-history', label: 'Riwayat Feedback', icon: History },
   { path: '/complaints', label: 'Keluhan', icon: AlertTriangle },
 ];

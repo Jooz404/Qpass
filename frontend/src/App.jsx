@@ -95,7 +95,7 @@ export default function App() {
               } />
 
               <Route path="/scan-qr" element={
-                <PrivateRoute roles={['ADMIN', 'SPBU']}>
+                <PrivateRoute roles={['ADMIN', 'SPBU', 'AMT']}>
                   <DashboardLayout>
                     <ScanQRPage />
                   </DashboardLayout>
