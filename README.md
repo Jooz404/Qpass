@@ -173,13 +173,7 @@ node prisma/seed.js
 npm run dev
 ```
 
-#### Kredensial Akun Seeder Pengujian:
-| No | Peran (Role) | Email Login | Password Default |
-|---|---|---|---|
-| 1 | **Administrator** | `admin@qpass.com` | `admin123` |
-| 2 | **Pengawas** | `pengawas@qpass.com` | `admin123` |
-| 3 | **Operator SPBU** | `spbu@qpass.com` | `admin123` |
-| 4 | **Driver AMT** | `amt@qpass.com` | `admin123` |
+> **Catatan Seeder:** Kredensial akun simulasi pengujian lokal (*Administrator, Pengawas, Operator SPBU, dan Driver AMT*) akan otomatis ditampilkan pada output konsol terminal setelah perintah `node prisma/seed.js` selesai dieksekusi.
 
 ### 3. Setup Frontend
 Buka terminal baru pada direktori proyek:
