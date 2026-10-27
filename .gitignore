@@ -6,9 +6,18 @@ frontend/node_modules/
 # Environment and sensitive data
 .env
 .env.*
+.env.production
+!.env.example
 *.pem
 *.key
-scripts/
+/scripts/
+
+# Uploads & Media
+backend/uploads/*
+!backend/uploads/.gitkeep
+backend/uploads/profiles/*
+!backend/uploads/profiles/.gitkeep
+uploads/
 
 # Logs & Temporary result files
 *.log
@@ -18,8 +27,12 @@ vps_info*.txt
 vps_check_output*.txt
 pg_inspection.txt
 
-# Database dumps
+# Database dumps & backups
 *.sql
+*.sql.gz
+*.dump
+*.tar
+*.bak
 
 # Python cache & virtual environments
 __pycache__/
@@ -30,10 +43,12 @@ venv/
 # Build & Dist outputs
 dist/
 build/
+frontend/dist/
 .next/
 out/
 *.mjs
 *.timestamp*
+vite.config.js.timestamp*
 
 # OS / Editor temporary files & binaries
 .DS_Store
