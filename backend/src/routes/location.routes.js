@@ -167,19 +167,36 @@ router.get('/active', authenticate, authorize('ADMIN', 'PENGAWAS', 'SPBU'), asyn
       orderBy: { updatedAt: 'desc' },
     });
 
-    const activeTrackings = activeLOs.map(lo => ({
-      loId: lo.id,
-      noLO: lo.noLO,
-      product: lo.product,
-      volume: lo.volume,
-      status: lo.status,
-      amt: lo.amt,
-      truck: lo.truck,
-      spbu: lo.spbu,
-      lat: lo.amt?.latestLat || null,
-      lng: lo.amt?.latestLng || null,
-      lastUpdate: lo.amt?.lastLocationUpdate || null,
-    }));
+    // Deduplicate by truckId or amtId (keep only the latest active LO per truck / AMT)
+    const seenTrucks = new Set();
+    const seenAmts = new Set();
+    const activeTrackings = [];
+
+    for (const lo of activeLOs) {
+      const truckKey = lo.truckId ? `truck-${lo.truckId}` : null;
+      const amtKey = lo.amtId ? `amt-${lo.amtId}` : null;
+
+      if ((truckKey && seenTrucks.has(truckKey)) || (amtKey && seenAmts.has(amtKey))) {
+        continue; // Skip older stale IN_TRANSIT LOs for the same truck/AMT
+      }
+
+      if (truckKey) seenTrucks.add(truckKey);
+      if (amtKey) seenAmts.add(amtKey);
+
+      activeTrackings.push({
+        loId: lo.id,
+        noLO: lo.noLO,
+        product: lo.product,
+        volume: lo.volume,
+        status: lo.status,
+        amt: lo.amt,
+        truck: lo.truck,
+        spbu: lo.spbu,
+        lat: lo.amt?.latestLat || null,
+        lng: lo.amt?.latestLng || null,
+        lastUpdate: lo.amt?.lastLocationUpdate || null,
+      });
+    }
 
     res.json({ success: true, data: activeTrackings });
   } catch (error) {

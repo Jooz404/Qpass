@@ -1,64 +1,75 @@
 # Panduan & Dokumentasi Deployment VPS - Q-Pass Bitung
 
-Dokumen ini berisi panduan teknis lengkap mengenai arsitektur, konfigurasi, dan langkah-langkah deployment aplikasi **Q-Pass Bitung** di VPS Linux (Ubuntu 24.04 LTS).
+Dokumen ini berisi panduan teknis mengenai arsitektur, konfigurasi lingkungan, dan langkah-langkah deployment aplikasi **Q-Pass Bitung** pada server VPS Linux (Ubuntu 24.04 LTS).
 
 ---
 
-## 1. Arsitektur & Informasi Server
+## 1. Arsitektur & Spesifikasi Server
 
-* **IP Server VPS**: `103.253.213.97`
-* **Domain Utama**: `qpass.my.id` (dan `www.qpass.my.id`)
-* **Sistem Operasi**: Ubuntu 24.04 LTS
-* **Database**: PostgreSQL 16+ (Port `5432`, Database: `qpass_bitung`, User: `myuser`)
-* **Backend API**: Node.js v20 / Express.js / Socket.IO / Prisma ORM (PM2 Process: `qpass-backend`, Port `5000`)
-* **Frontend Web**: React + Vite SPA (Di-build dan disajikan statis di `/var/www/qpass`)
-* **Web Server / Reverse Proxy**: Nginx (Port `80`)
+* **Sistem Operasi**: Ubuntu 24.04 LTS (atau versi Linux modern yang kompatibel)
+* **Web Server / Reverse Proxy**: Nginx (Port `80` / `443`)
+* **Backend Runtime**: Node.js v20+ / Express.js / Socket.IO / Prisma ORM
+* **Process Manager**: PM2 (`qpass-backend`, Port default `5000`)
+* **Frontend Web**: React + Vite SPA (di-build dan disajikan statis di `/var/www/qpass`)
+* **Database**: PostgreSQL 16+ (Port default `5432`)
 
 ---
 
-## 2. Struktur Direktori di VPS
+## 2. Struktur Direktori di Server
 
 ```text
 /root/home/qpass/
 ├── backend/                  # Source code Node.js Backend API
-│   ├── .env                  # Environment variables produksi
+│   ├── .env                  # Environment variables produksi (tidak ditrack di git)
 │   ├── src/                  # Controller, routes, middleware, server.js
 │   ├── prisma/               # Schema database Prisma & seeder
 │   └── uploads/              # Folder penyimpanan file upload (bukti/lampiran)
 ├── frontend/                 # Source code React Frontend
+│   ├── .env                  # Environment variables frontend produksi
 │   └── dist/                 # Hasil build statis Vite (di-copy ke /var/www/qpass)
-├── ecosystem.config.js       # Konfigurasi PM2 Process Manager
-└── qpass_bitung_backup.sql   # File backup awal database PostgreSQL
+├── deployment/               # Konfigurasi Nginx
+└── ecosystem.config.js       # Konfigurasi PM2 Process Manager
 
-/var/www/qpass/               # Folder publik tempat Nginx membaca file Frontend
-/etc/nginx/sites-available/   # File konfigurasi Nginx (qpass.my.id)
+/var/www/qpass/               # Direktori publik Nginx untuk file Frontend
+/etc/nginx/sites-available/   # Konfigurasi Nginx server block
 ```
 
 ---
 
-## 3. Konfigurasi Sistem & File Kunci
+## 3. Konfigurasi Lingkungan (Environment Variables)
 
-### A. Environment Backend (`/root/home/qpass/backend/.env`)
+### A. Backend (`backend/.env`)
+Salin dari `backend/.env.example` lalu sesuaikan dengan kredensial server produksi:
+
 ```env
 PORT=5000
 NODE_ENV=production
-DATABASE_URL=postgresql://myuser:123@127.0.0.1:5432/qpass_bitung
-JWT_SECRET="qpass_bitung_super_secret_jwt_key_2026"
+DATABASE_URL=postgresql://<DB_USER>:<DB_PASSWORD>@127.0.0.1:5432/qpass_bitung
+JWT_SECRET="<GENERATE_SECURE_RANDOM_SECRET_KEY>"
 JWT_EXPIRES_IN="7d"
 
 FRONTEND_URL=https://qpass.my.id
 QR_BASE_URL=https://qpass.my.id/feedback
 
+SMTP_HOST="smtp.gmail.com"
+SMTP_PORT=587
+SMTP_USER="<EMAIL_PENGIRIM>"
+SMTP_PASS="<APP_PASSWORD_EMAIL>"
+NOTIFY_EMAIL="<EMAIL_NOTIFIKASI>"
+
 UPLOAD_PATH="./uploads"
 MAX_FILE_SIZE=5242880
 ```
 
-### B. Environment Frontend (`/root/home/qpass/frontend/.env`)
+### B. Frontend (`frontend/.env`)
+Salin dari `frontend/.env.example`:
+
 ```env
 VITE_API_URL=https://qpass.my.id/api
+VITE_GOOGLE_MAPS_API_KEY=<GOOGLE_MAPS_API_KEY>
 ```
 
-### C. Konfigurasi PM2 (`/root/home/qpass/ecosystem.config.js`)
+### C. Konfigurasi PM2 (`ecosystem.config.js`)
 ```javascript
 module.exports = {
   apps: [
@@ -79,7 +90,7 @@ module.exports = {
 ```nginx
 server {
     listen 80;
-    server_name qpass.my.id www.qpass.my.id 103.253.213.97 _;
+    server_name qpass.my.id www.qpass.my.id <IP_SERVER_VPS> _;
 
     # Frontend Single Page Application (Vite build)
     root /var/www/qpass;
@@ -123,94 +134,90 @@ server {
 
 ---
 
-## 4. Langkah-Langkah Deployment (Lengkap dari Awal)
+## 4. Langkah-Langkah Deployment
 
 ### Langkah 1: Persiapan Database PostgreSQL
 ```bash
-# Masuk ke psql sebagai user postgres
+# Masuk ke sesi psql sebagai user postgres
 sudo -u postgres psql
 
-# Buat user & database
+# Buat database & user
 CREATE DATABASE qpass_bitung;
-CREATE USER myuser WITH PASSWORD '123';
-GRANT ALL PRIVILEGES ON DATABASE qpass_bitung TO myuser;
+CREATE USER <DB_USER> WITH PASSWORD '<DB_PASSWORD>';
+GRANT ALL PRIVILEGES ON DATABASE qpass_bitung TO <DB_USER>;
 \q
-
-# Restore database jika ada file backup .sql
-sudo -u postgres psql -d qpass_bitung -f /root/home/qpass/qpass_bitung_backup.sql
 ```
 
-### Langkah 2: Setup Backend Node.js & Prisma
+### Langkah 2: Setup & Jalankan Backend
 ```bash
 cd /root/home/qpass/backend
 
-# Install dependensi backend
-npm install
+# Install dependensi
+npm install --omit=dev
 
 # Generate Prisma Client & sinkronisasi skema
 npx prisma generate
 npx prisma db push
 
-# Jalankan Backend via PM2
+# (Opsional) Jalankan data seeder awal akun pengguna
+node prisma/seed.js
+
+# Jalankan Backend melalui PM2 Process Manager
 cd /root/home/qpass
 pm2 start ecosystem.config.js
 pm2 save
 pm2 startup
 ```
 
-### Langkah 3: Build & Deploy Frontend React
+### Langkah 3: Build & Publikasikan Frontend
 ```bash
 cd /root/home/qpass/frontend
 
-# Install dependensi & build project
+# Install dependensi & kompilasi bundle produksi
 npm install
 npm run build
 
-# Pindahkan file hasil build ke folder publik Nginx
+# Salin aset build ke folder publik web server
 mkdir -p /var/www/qpass
-cp -rf /root/home/qpass/frontend/dist/* /var/www/qpass/
+cp -rf dist/* /var/www/qpass/
 chown -R www-data:www-data /var/www/qpass
 chmod -R 755 /var/www/qpass
 ```
 
-### Langkah 4: Setup Nginx Web Server
+### Langkah 4: Setup & Reload Nginx
 ```bash
-# Install Nginx (jika belum terinstall)
-sudo apt update && sudo apt install -y nginx
+# Pasang file konfigurasi Nginx
+sudo cp /root/home/qpass/deployment/qpass.my.id.conf /etc/nginx/sites-available/qpass.my.id
+sudo ln -sf /etc/nginx/sites-available/qpass.my.id /etc/nginx/sites-enabled/default
 
-# Aktifkan konfigurasi situs Nginx
-ln -sf /etc/nginx/sites-available/qpass.my.id /etc/nginx/sites-enabled/default
-
-# Uji konfigurasi Nginx
-nginx -t
-
-# Restart / Reload service Nginx
-systemctl reload nginx
+# Verifikasi sintaks dan reload Nginx
+sudo nginx -t
+sudo systemctl reload nginx
 ```
 
 ---
 
-## 5. Perintah Pemeliharaan & Monitoring (Opsional)
+## 5. Monitoring & Troubleshooting
 
-### A. Mengecek Status Aplikasi
-* **Status PM2 Backend**: `pm2 status`
-* **Log Backend**: `pm2 logs qpass-backend --lines 50`
+### A. Perintah Pemeliharaan
+* **Status PM2**: `pm2 status`
+* **Log Real-time Backend**: `pm2 logs qpass-backend --lines 50`
 * **Status Service Nginx**: `systemctl status nginx`
-* **Status Service Database**: `systemctl status postgresql`
+* **Status Database**: `systemctl status postgresql`
 
-### B. Menguji Response Endpoint (Health Check)
+### B. Health Check Endpoint
 ```bash
-# Cek backend internal
+# Verifikasi backend internal
 curl -i http://127.0.0.1:5000/api/health
 
-# Cek via Nginx reverse proxy
+# Verifikasi via Nginx reverse proxy
 curl -i http://127.0.0.1/api/health
 ```
 
 ### C. Troubleshooting Umum
-1. **PM2 Restart Continuous / Error EADDRINUSE**:
-   Pastikan tidak ada process orphaned yang mengunci port `5000` atau `5002`. Jalankan `npx kill-port 5000` atau `pm2 delete all && pm2 start ecosystem.config.js`.
-2. **Error 500 Internal Server Error Nginx pada Frontend**:
-   Disebabkan oleh permission folder `/root`. Pastikan file frontend dibaca dari `/var/www/qpass` dan memiliki izin `chmod -R 755 /var/www/qpass`.
-3. **Database Error P1000 (Authentication Failed)**:
-   Pastikan password PostgreSQL user `myuser` sudah di-set sesuai di `.env` (`ALTER USER myuser WITH PASSWORD '123';`).
+1. **Port Terkunci (EADDRINUSE: 5000)**:
+   Periksa proses yang sedang berjalan: `npx kill-port 5000` atau restart PM2: `pm2 restart qpass-backend`.
+2. **Error 500 Internal Server Error pada Frontend**:
+   Pastikan folder `/var/www/qpass` memiliki permission `755` dan dimiliki oleh user web server `www-data:www-data`.
+3. **Database Authentication Failed (Prisma P1000)**:
+   Pastikan string koneksi `DATABASE_URL` di file `.env` sudah sesuai dengan user dan password PostgreSQL di VPS.
